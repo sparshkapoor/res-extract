@@ -4,6 +4,7 @@ Paste a YouTube Short or Instagram Reel of a cooking video and get back a
 structured, step-by-step recipe: title, ingredients (with quantities —
 stated, or estimated from the transcript and step photos when they aren't),
 and steps each tied to a timestamp and a photo pulled from the video itself.
+Every extraction is cached and browsable later in a Saved Recipes gallery.
 
 ## Why it's built this way
 
@@ -38,7 +39,10 @@ iPhone/PWA ──HTTP──▶ [Colima: nginx] ──proxy /api,/media──▶ 
    (silent/ASMR cooking videos are out of scope), rather than sending
    near-empty input to the LLM.
 5. **Recipe extraction** — Qwen2.5 7B via Ollama, JSON-schema-constrained
-   output, grouped into coherent steps (not one step per sentence).
+   output, grouped into coherent steps (not one step per sentence). Also
+   pulls cook time, servings, calories, and oven temperature when stated
+   or clearly implied — left blank rather than guessed, unlike ingredient
+   quantities.
 6. **Citation → timestamp mapping** — each step cites a real transcript
    substring; that's matched back to a timestamp, with a fuzzy fallback and
    monotonicity enforcement (steps can't jump backward in time).
@@ -144,7 +148,12 @@ frontend build, and moving Instagram cookies over.
 - **No forced phoneme alignment or scene-detection frame scoring** —
   timestamps come from citation-matching against ASR/caption segments, and
   frames are a single `ffmpeg` grab per step, not the sharpest of a burst.
-- **OCR under `launchd`/no GUI session is unverified** on the actual M1 Air
-  target — Vision framework calls may behave differently without an active
-  window-server session. Flagged in `deploy/README.md` as the first thing
-  to check if OCR silently returns nothing once deployed.
+- **LaunchAgents require an active GUI/loginwindow session** (`gui/<uid>`
+  launchd domain) — pure SSH access doesn't create one. Verified on a real
+  deployment that a LaunchDaemon (system-wide, no session needed) works
+  fine instead, including OCR, which was the open question here. See
+  `deploy/README.md` for both paths.
+- **Colima's virtiofs mount type doesn't reliably bind-mount individual
+  files** (directories are fine) — config files that need mounting into a
+  container should be baked in at image-build time instead, not
+  runtime-mounted.

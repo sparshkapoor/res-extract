@@ -8,8 +8,9 @@ services:
   nginx:
     build: .
     ports:
-      # 8080 is already taken by another project's stack running on this
-      # shared server (flightselect_nginx) -- do not reuse it.
+      # Pick a free host port -- check `docker ps` first if this machine
+      # runs other projects, since 8080 is a common default that may
+      # already be taken.
       - "8090:80"
     volumes:
       # Directory bind-mounts are reliable under Colima's virtiofs; only the
