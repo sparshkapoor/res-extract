@@ -42,6 +42,33 @@ def test_ingredient_optional_fields_default_none():
     assert ing.unit is None
 
 
+def test_ingredient_strips_duplicated_unit_from_quantity():
+    # Regression test: observed in production on the M1 Air — every LLM
+    # pass that fills these fields (pass 1, OCR refinement, VLM estimation)
+    # intermittently embeds the unit word in `quantity` too, e.g.
+    # quantity="1.8 kg", unit="kg", which rendered as "1.8 kg kg" in the UI.
+    ing = Ingredient(name="chicken breast", quantity="1.8 kg", unit="kg")
+    assert ing.quantity == "1.8"
+    assert ing.unit == "kg"
+
+
+def test_ingredient_dedup_fires_on_incremental_assignment():
+    # vlm.py sets .quantity then .unit as two separate assignments (not a
+    # single constructor call) — the dedup must still fire correctly by
+    # the time both are set, regardless of assignment order.
+    ing = Ingredient(name="pasta")
+    ing.quantity = "215 g"
+    ing.unit = "g"
+    assert ing.quantity == "215"
+    assert ing.unit == "g"
+
+
+def test_ingredient_dedup_is_noop_when_no_duplication():
+    ing = Ingredient(name="salt", quantity="1/2", unit="tsp")
+    assert ing.quantity == "1/2"
+    assert ing.unit == "tsp"
+
+
 def test_job_status_values_match_pipeline_stage_names():
     # These string values are persisted in SQLite and sent over SSE, so
     # renaming the enum members would silently break stored/streamed state.
