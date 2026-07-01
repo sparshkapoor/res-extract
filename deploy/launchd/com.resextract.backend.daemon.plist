@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.resextract.backend</string>
+
+    <!-- LaunchDaemon variant: use this instead of the LaunchAgent plist when
+         there's no active GUI/loginwindow session (e.g. SSH-only access,
+         auto-login not configured) — LaunchAgents attach to a user's gui/<uid>
+         domain, which doesn't exist without one. Runs system-wide at boot,
+         no login required at all. Tradeoff: ocrmac's Vision framework calls
+         are unverified in this more restricted daemon context — test directly. -->
+
+    <key>UserName</key>
+    <string>REPLACE_ME</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/REPLACE_ME/res-extract/backend/.venv/bin/uvicorn</string>
+        <string>app.main:app</string>
+        <string>--host</string>
+        <string>0.0.0.0</string>
+        <string>--port</string>
+        <string>8000</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/REPLACE_ME/res-extract/backend</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/REPLACE_ME/res-extract/backend/storage/backend.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/REPLACE_ME/res-extract/backend/storage/backend.err.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>OLLAMA_KEEP_ALIVE</key>
+        <string>-1</string>
+    </dict>
+</dict>
+</plist>

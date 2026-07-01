@@ -95,6 +95,19 @@ class Recipe(BaseModel):
     platform: Platform
     ingredients: list[Ingredient]
     steps: list[Step]
+    cook_time_minutes: int | None = Field(
+        default=None, description="Total cook time in minutes, if stated or clearly implied."
+    )
+    servings: int | None = Field(
+        default=None, description="Number of servings the recipe yields, if stated or clearly implied."
+    )
+    calories: int | None = Field(
+        default=None, description="Estimated calories per serving, if stated on-screen or in the transcript."
+    )
+    oven_temp_f: int | None = Field(
+        default=None,
+        description="Oven temperature in Fahrenheit, if the recipe uses an oven and a temperature is stated.",
+    )
 
 
 class SavedRecipeSummary(BaseModel):

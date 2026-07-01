@@ -38,6 +38,10 @@ export interface Recipe {
   platform: Platform;
   ingredients: Ingredient[];
   steps: Step[];
+  cook_time_minutes: number | null;
+  servings: number | null;
+  calories: number | null;
+  oven_temp_f: number | null;
 }
 
 export interface JobCreateResponse {

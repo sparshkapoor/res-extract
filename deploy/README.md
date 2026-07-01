@@ -22,24 +22,47 @@ brew services restart ollama
 
 ## 2. Backend (bare-metal FastAPI, launchd-managed)
 
-Edit `deploy/launchd/com.resextract.backend.plist`, replacing every
-`REPLACE_ME` with the actual path to the repo on the M1 Air, then:
+There are two ways to run this, depending on whether a GUI/loginwindow
+session actually exists on the machine.
+
+### 2a. LaunchAgent (needs an active GUI session)
+
+`LaunchAgent`s attach to a user's `gui/<uid>` launchd domain, which only
+exists once that user has actually logged in via loginwindow — SSH alone
+does not create one. If you have (or set up) auto-login for a user
+(`sudo sysadminctl -autologin set -userName <user> -password <password>`,
+requires FileVault to be off, and a reboot to take effect), use this path:
 
 ```
-cp deploy/launchd/com.resextract.backend.plist ~/Library/LaunchAgents/
+sed "s|/Users/REPLACE_ME|$HOME|g" deploy/launchd/com.resextract.backend.plist > ~/Library/LaunchAgents/com.resextract.backend.plist
 launchctl load -w ~/Library/LaunchAgents/com.resextract.backend.plist
 ```
 
-`KeepAlive` + `RunAtLoad` mean it restarts automatically on crash or
-reboot. On startup, `app/main.py` sweeps any job left in a non-terminal
-state from before the restart and marks it failed, so nothing hangs.
+### 2b. LaunchDaemon (no GUI session needed — SSH-only access)
 
-**Known unknown, verify on the real M1 Air**: `ocrmac`'s Vision framework
+Runs system-wide at boot, independent of any user session. This is what
+you want if the machine is only ever accessed over SSH. Requires root to
+install (the plist must be root-owned or launchd refuses to load it):
+
+```
+sed "s|/Users/REPLACE_ME|$(whoami)|g; s|REPLACE_ME|$(whoami)|g" deploy/launchd/com.resextract.backend.daemon.plist | sudo tee /Library/LaunchDaemons/com.resextract.backend.plist > /dev/null
+sudo chown root:wheel /Library/LaunchDaemons/com.resextract.backend.plist
+sudo launchctl load -w /Library/LaunchDaemons/com.resextract.backend.plist
+```
+
+Either way, `KeepAlive` + `RunAtLoad` mean it restarts automatically on
+crash or reboot. On startup, `app/main.py` sweeps any job left in a
+non-terminal state from before the restart and marks it failed, so
+nothing hangs.
+
+**Known unknown, verified per-deployment**: `ocrmac`'s Vision framework
 calls may behave differently when the process has no interactive window-
-server session (LaunchAgent vs LaunchDaemon, TCC permissions). If OCR
-silently returns nothing under launchd but works when run manually from a
-terminal, this is the first thing to check — see the plan's verification
-section for the fallback options.
+server session — this is more likely to actually matter under the
+LaunchDaemon path (2b) than the LaunchAgent path (2a), since a LaunchDaemon
+runs in a more restricted context than even a headless-but-logged-in GUI
+session. If OCR silently returns nothing once the service is up, test
+`ocrmac` directly against a real image while running as the daemon's user
+to isolate whether it's a TCC/session issue.
 
 ## 3. Frontend build + Colima/nginx
 
