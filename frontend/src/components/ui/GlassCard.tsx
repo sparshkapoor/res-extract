@@ -3,16 +3,23 @@ import type { ReactNode } from "react";
 interface GlassCardProps {
   children: ReactNode;
   className?: string;
+  /** Grid tiles get the hover-intensify glass treatment; the static hero panel doesn't. */
+  interactive?: boolean;
 }
 
-// Approximated "liquid glass" (there is no official liquid-glass.css — Apple
-// documents this for native platforms only). Layered translucency + a thin
-// highlight border + backdrop-blur, with a solid-fill fallback via the
-// bg-black/40 base for browsers without backdrop-filter support.
-export function GlassCard({ children, className = "" }: GlassCardProps) {
+// Genuine glass — reserved for panels sitting directly over recipe photography.
+// Translucent WHITE tint (never a dark scrim, which kills the "glass" read),
+// backdrop-blur + saturate, a brighter top edge to fake the refracted highlight
+// real glass has, and a soft lift shadow. See DESIGN.md "Elevation & Depth": if a
+// panel isn't sitting over a photo, it doesn't get blur or shadow — full stop.
+export function GlassCard({ children, className = "", interactive = false }: GlassCardProps) {
   return (
     <div
-      className={`rounded-lg border border-white/15 bg-black/40 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] ${className}`}
+      className={`rounded-lg border border-t-[var(--color-glass-border-top)] border-x-[var(--color-glass-border)] border-b-[var(--color-glass-border)] bg-white/[0.08] backdrop-blur-[22px] backdrop-saturate-[1.65] shadow-[0_20px_40px_-12px_rgba(0,0,0,0.45)] ${
+        interactive
+          ? "press-scale transition-[transform,backdrop-filter] duration-200 ease-out hover:-translate-y-1 hover:scale-[1.015] hover:backdrop-blur-[26px] hover:backdrop-saturate-[1.8]"
+          : ""
+      } ${className}`}
     >
       {children}
     </div>

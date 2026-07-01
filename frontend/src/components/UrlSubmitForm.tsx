@@ -18,11 +18,11 @@ export function UrlSubmitForm({ onSubmit, submitting, error }: UrlSubmitFormProp
 
   return (
     <form onSubmit={handleSubmit} className="flex w-full max-w-[560px] flex-col gap-3">
-      <label htmlFor="video-url" className="text-[14px] font-medium text-ink-muted-80">
+      <label htmlFor="video-url" className="text-[11px] font-bold uppercase tracking-[0.08em] text-text-muted">
         YouTube Short or Instagram Reel URL
       </label>
-      <div className="flex items-center gap-2 rounded-full border border-hairline bg-white px-5 py-3 focus-within:border-primary">
-        <Link size={18} weight="bold" className="shrink-0 text-ink-muted-48" />
+      <div className="flex items-center gap-2 rounded-full border border-hairline bg-surface-2 px-5 py-3 focus-within:border-accent">
+        <Link size={18} weight="bold" className="shrink-0 text-text-muted" />
         <input
           id="video-url"
           type="url"
@@ -30,12 +30,12 @@ export function UrlSubmitForm({ onSubmit, submitting, error }: UrlSubmitFormProp
           placeholder="https://www.youtube.com/shorts/..."
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          className="w-full bg-transparent text-[17px] text-ink outline-none placeholder:text-ink-muted-48"
+          className="w-full bg-transparent text-[17px] text-text outline-none placeholder:text-text-faint"
           required
         />
       </div>
       {error && (
-        <p role="alert" className="text-[14px] text-red-600">
+        <p role="alert" className="text-[14px] text-danger">
           {error}
         </p>
       )}

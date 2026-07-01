@@ -35,6 +35,10 @@ instead of coherent cooking actions.
 - Each step's `verbatim_transcript_citation` MUST be an exact substring copied from the transcript text \
 you were given — do not paraphrase it. This is used to map the step back to a timestamp, so it must be \
 findable verbatim in the transcript.
+- Fill `cook_time_minutes`, `servings`, `calories`, and `oven_temp_f` ONLY when the transcript or on-screen \
+text states or clearly implies them (e.g. "bake for 25 minutes" -> cook_time_minutes could include that, \
+"this makes 4 servings" -> servings=4, "preheat to 350" in an oven-baking context -> oven_temp_f=350). \
+Leave any of these null rather than guessing — unlike ingredient quantities, these are not estimated.
 - Normalize fractional/obscure measurements where possible (e.g. "a pinch of salt" stays as-is if no \
 quantity was stated; "half a cup" becomes quantity="1/2", unit="cup").
 - Do not invent ingredients or steps that aren't supported by the transcript.

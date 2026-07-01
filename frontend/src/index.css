@@ -1,47 +1,52 @@
 @import "tailwindcss";
 
-/* Design tokens from DESIGN.md (getdesign apple) — see that file for the
-   full rationale. Only the tokens this app actually uses are mapped here. */
+/* Design tokens from DESIGN.md (res-extract-dark) — see that file for the full
+   rationale. Precision-mode chrome uses the surface ladder + hairlines; glass mode
+   (recipe photography) is the only place blur/shadow appear. */
 @theme {
-  --font-display: "SF Pro Display", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-body: "SF Pro Text", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-prose: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  --color-primary: #0066cc;
-  --color-primary-focus: #0071e3;
-  --color-primary-on-dark: #2997ff;
-  --color-ink: #1d1d1f;
-  --color-ink-muted-80: #333333;
-  --color-ink-muted-48: #7a7a7a;
-  --color-canvas: #ffffff;
-  --color-canvas-parchment: #f5f5f7;
-  --color-surface-pearl: #fafafc;
-  --color-hairline: #e0e0e0;
+  --color-canvas: #0a0a0b;
+  --color-surface-1: #141416;
+  --color-surface-2: #1c1c1f;
+  --color-surface-3: #242428;
+  --color-hairline: rgba(255, 255, 255, 0.08);
+  --color-hairline-strong: rgba(255, 255, 255, 0.14);
 
-  /* Dark recipe-detail surfaces (Apple News recipe-card style) */
-  --color-surface-black: #000000;
-  --color-surface-tile-1: #1c1c1e;
-  --color-surface-tile-2: #2c2c2e;
-  --color-body-on-dark: #ffffff;
-  --color-body-muted: #98989d;
+  --color-text: #f2f2f0;
+  --color-text-muted: #98989d;
+  --color-text-faint: #5c5c60;
 
-  --radius-xs: 5px;
-  --radius-sm: 8px;
-  --radius-md: 11px;
-  --radius-lg: 18px;
+  --color-accent: #f5a623;
+  --color-accent-strong: #d9860a;
+  --color-accent-on: #1a1006;
+
+  --color-glass-tint: rgba(255, 255, 255, 0.08);
+  --color-glass-border: rgba(255, 255, 255, 0.12);
+  --color-glass-border-top: rgba(255, 255, 255, 0.25);
+  --color-glass-scrim: rgba(0, 0, 0, 0.55);
+
+  --color-danger: #e5484d;
+
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
   --radius-pill: 9999px;
 }
 
 :root {
-  color-scheme: light;
-  font-family: var(--font-body);
+  color-scheme: dark;
+  font-family: var(--font-prose);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
 body {
   margin: 0;
-  background: var(--color-canvas-parchment);
-  color: var(--color-ink);
+  background: var(--color-canvas);
+  color: var(--color-text);
   /* iOS PWA: no rubber-band overscroll, no text selection ghosting on taps */
   overscroll-behavior-y: none;
   -webkit-user-select: none;
@@ -54,20 +59,69 @@ textarea {
   user-select: text;
 }
 
-/* Apple's one system-wide micro-interaction: press state is a scale-down,
-   never a color/shadow change. */
+/* Press state is a scale-down, never a color/shadow change — the one
+   system-wide micro-interaction, used on every tappable element. */
 .press-scale {
   transition: transform 0.15s ease;
 }
 .press-scale:active {
-  transform: scale(0.95);
+  transform: scale(0.96);
 }
 
-/* Safe-area insets so the glassmorphic UI bleeds correctly into the
-   Dynamic Island / home indicator instead of sitting under a hard edge. */
+/* Safe-area insets so the UI bleeds correctly into the Dynamic Island / home
+   indicator instead of sitting under a hard edge. */
 .safe-top {
   padding-top: max(env(safe-area-inset-top), 1rem);
 }
 .safe-bottom {
   padding-bottom: max(env(safe-area-inset-bottom), 1rem);
+}
+
+/* --- Motion --------------------------------------------------------- */
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 500ms ease-out both;
+  animation-delay: calc(var(--stagger-index, 0) * 60ms);
+}
+
+@keyframes shimmer {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background-color: var(--color-surface-2);
+  background-image: linear-gradient(
+    90deg,
+    var(--color-surface-2) 0%,
+    var(--color-surface-3) 50%,
+    var(--color-surface-2) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+/* One global kill-switch. No component checks prefers-reduced-motion itself. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
