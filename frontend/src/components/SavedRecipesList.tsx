@@ -90,7 +90,7 @@ export function SavedRecipesList({ onSelect }: SavedRecipesListProps) {
                 <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-text-muted">
                   {r.platform}
                 </span>
-                <p className="truncate text-[14px] font-semibold leading-[1.2] tracking-[-0.02em] text-text">
+                <p className="font-editorial truncate text-[16px] font-semibold leading-[1.2] text-text">
                   {r.title}
                 </p>
               </div>

@@ -1,33 +1,78 @@
-import { ArrowLeft } from "@phosphor-icons/react";
-import type { Recipe } from "../types/recipe";
+import { useRef } from "react";
+import { ArrowLeft, Timer, UsersThree, Flame, Thermometer } from "@phosphor-icons/react";
+import type { Recipe, Ingredient } from "../types/recipe";
 import { StepCard } from "./StepCard";
 import { GlassCard } from "./ui/GlassCard";
-import { staggerStyle } from "../lib/motion";
+import { useHeroScrollReveal } from "../hooks/useHeroScrollReveal";
+import { useScrollReveal } from "../hooks/useScrollReveal";
 
 interface RecipeCardProps {
   recipe: Recipe;
   onReset: () => void;
 }
 
+// One ingredient row, scroll-revealed independently via useScrollReveal — this
+// is why it's split out of the map() body below (hooks need a stable
+// per-element ref, not a ref array hand-rolled inline).
+function IngredientRow({ ing, showDivider }: { ing: Ingredient; showDivider: boolean }) {
+  const rowRef = useRef<HTMLDivElement>(null);
+  useScrollReveal(rowRef);
+
+  return (
+    <div
+      ref={rowRef}
+      className={`flex items-center justify-between px-4 py-3 ${showDivider ? "border-t border-hairline" : ""}`}
+    >
+      <span className="text-[15px] text-text">{ing.name}</span>
+      <span
+        className="ml-3 shrink-0 text-[15px] text-text-muted"
+        title={ing.is_estimated ? "Estimated — not stated in the video" : undefined}
+      >
+        {ing.is_estimated && "~"}
+        {[ing.quantity, ing.unit].filter(Boolean).join(" ") || "to taste"}
+      </span>
+    </div>
+  );
+}
+
+// A single step, scroll-revealed independently via useScrollReveal — mirrors
+// IngredientRow's shape so StepCard itself can stay a plain forwardRef card.
+function RevealedStepCard({ step }: { step: Recipe["steps"][number] }) {
+  const stepRef = useRef<HTMLDivElement>(null);
+  useScrollReveal(stepRef);
+  return <StepCard ref={stepRef} step={step} />;
+}
+
 // The one place in the whole app where hero photography meets the metadata
 // system directly: glass panel over the photo, monospace data row, flat
 // precision list below. See DESIGN.md — glass is reserved for exactly this.
 export function RecipeCard({ recipe, onReset }: RecipeCardProps) {
-  const heroImage = recipe.steps.find((s) => s.image_path)?.image_path;
+  // Last available frame, not first — usually the plated/finished shot,
+  // steadier than an early prep/motion shot. See DESIGN.md Known Gaps re: the
+  // 360x640 source-resolution ceiling this doesn't (and can't) fix, only
+  // avoids compounding.
+  const heroImage = [...recipe.steps].reverse().find((s) => s.image_path)?.image_path;
 
-  const metadata: { label: string; highlight?: boolean }[] = [
+  const heroContainerRef = useRef<HTMLDivElement>(null);
+  const heroImageRef = useRef<HTMLImageElement>(null);
+  const heroPanelRef = useRef<HTMLDivElement>(null);
+  useHeroScrollReveal(heroImageRef, heroPanelRef, heroContainerRef);
+
+  const metadata: { label: string; highlight?: boolean; icon: typeof Timer }[] = [
     ...(recipe.cook_time_minutes != null
-      ? [{ label: `${recipe.cook_time_minutes} min`, highlight: true }]
+      ? [{ label: `${recipe.cook_time_minutes} min`, highlight: true, icon: Timer }]
       : []),
-    ...(recipe.servings != null ? [{ label: `Serves ${recipe.servings}` }] : []),
-    ...(recipe.calories != null ? [{ label: `${recipe.calories} cal` }] : []),
-    ...(recipe.oven_temp_f != null ? [{ label: `${recipe.oven_temp_f}°F` }] : []),
+    ...(recipe.servings != null ? [{ label: `Serves ${recipe.servings}`, icon: UsersThree }] : []),
+    ...(recipe.calories != null ? [{ label: `${recipe.calories} cal`, icon: Flame }] : []),
+    ...(recipe.oven_temp_f != null ? [{ label: `${recipe.oven_temp_f}°F`, icon: Thermometer }] : []),
   ];
 
   return (
     <div className="flex w-full max-w-[560px] flex-col bg-canvas pb-10">
-      <div className="relative -mt-10 aspect-[4/3] w-full overflow-hidden bg-surface-2 animate-fade-in-up" style={staggerStyle(0)}>
-        {heroImage && <img src={heroImage} alt={recipe.title} className="h-full w-full object-cover" />}
+      <div ref={heroContainerRef} className="relative -mt-10 aspect-[3/4] w-full overflow-hidden bg-surface-2">
+        {heroImage && (
+          <img ref={heroImageRef} src={heroImage} alt={recipe.title} className="h-full w-full object-cover" />
+        )}
         {/* Scrim sits between the photo and the glass layer — protects title
             legibility without making the glass panel itself opaque. */}
         <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-glass-scrim to-transparent" />
@@ -40,17 +85,23 @@ export function RecipeCard({ recipe, onReset }: RecipeCardProps) {
           <ArrowLeft size={18} weight="bold" />
         </button>
 
-        <GlassCard className="absolute inset-x-4 bottom-4 px-5 py-4">
+        <GlassCard ref={heroPanelRef} className="absolute inset-x-4 bottom-4 px-5 py-4">
           <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-text-muted">
             {recipe.platform}
           </span>
-          <h1 className="mt-1 text-[32px] font-bold leading-[1.1] tracking-[-0.03em] text-text">
+          <h1 className="mt-1 font-editorial text-[40px] font-bold leading-[1.05] tracking-[-0.01em] text-text">
             {recipe.title}
           </h1>
           {metadata.length > 0 && (
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[15px] font-semibold tracking-[-0.01em]">
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
               {metadata.map((m) => (
-                <span key={m.label} className={m.highlight ? "text-accent" : "text-text-muted"}>
+                <span
+                  key={m.label}
+                  className={`inline-flex items-center gap-1.5 font-mono text-[15px] font-semibold tracking-[-0.01em] ${
+                    m.highlight ? "text-accent" : "text-text-muted"
+                  }`}
+                >
+                  <m.icon size={15} weight="bold" />
                   {m.label}
                 </span>
               ))}
@@ -60,36 +111,22 @@ export function RecipeCard({ recipe, onReset }: RecipeCardProps) {
       </div>
 
       <div className="flex flex-col gap-8 px-4 pt-6">
-        <section className="animate-fade-in-up" style={staggerStyle(1)}>
-          <h2 className="mb-3 text-[19px] font-semibold leading-[1.2] tracking-[-0.02em] text-text">
+        <section>
+          <h2 className="mb-3 font-editorial text-[21px] font-semibold italic leading-[1.2] text-text">
             Ingredients
           </h2>
           <div className="overflow-hidden rounded-md bg-surface-2">
             {recipe.ingredients.map((ing, i) => (
-              <div
-                key={ing.name}
-                className={`flex items-center justify-between px-4 py-3 ${
-                  i > 0 ? "border-t border-hairline" : ""
-                }`}
-              >
-                <span className="text-[15px] text-text">{ing.name}</span>
-                <span
-                  className="ml-3 shrink-0 text-[15px] text-text-muted"
-                  title={ing.is_estimated ? "Estimated — not stated in the video" : undefined}
-                >
-                  {ing.is_estimated && "~"}
-                  {[ing.quantity, ing.unit].filter(Boolean).join(" ") || "to taste"}
-                </span>
-              </div>
+              <IngredientRow key={ing.name} ing={ing} showDivider={i > 0} />
             ))}
           </div>
         </section>
 
-        <section className="animate-fade-in-up" style={staggerStyle(2)}>
-          <h2 className="mb-3 text-[19px] font-semibold leading-[1.2] tracking-[-0.02em] text-text">Steps</h2>
+        <section>
+          <h2 className="mb-3 font-editorial text-[21px] font-semibold italic leading-[1.2] text-text">Steps</h2>
           <div className="flex flex-col gap-2">
-            {recipe.steps.map((step, i) => (
-              <StepCard key={step.index} step={step} staggerIndex={i} />
+            {recipe.steps.map((step) => (
+              <RevealedStepCard key={step.index} step={step} />
             ))}
           </div>
         </section>

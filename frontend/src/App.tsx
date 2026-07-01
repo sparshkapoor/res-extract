@@ -80,21 +80,18 @@ function App() {
     <div
       className={
         isDone
-          ? "flex min-h-[100dvh] w-full min-w-0 flex-col items-center overflow-x-hidden bg-canvas"
-          : "safe-top safe-bottom flex min-h-[100dvh] w-full min-w-0 flex-col items-center overflow-x-hidden bg-canvas px-6 py-10"
+          ? "animate-ambient-drift flex min-h-[100dvh] w-full min-w-0 flex-col items-center overflow-x-hidden bg-canvas"
+          : "animate-ambient-drift safe-top safe-bottom flex min-h-[100dvh] w-full min-w-0 flex-col items-center overflow-x-hidden bg-canvas px-6 py-10"
       }
-      style={
-        !isDone
-          ? {
-              backgroundImage:
-                "radial-gradient(ellipse 80% 50% at 50% -10%, rgba(245,166,35,0.10), transparent)",
-            }
-          : undefined
-      }
+      style={{
+        backgroundImage: "radial-gradient(ellipse 80% 50% at 50% -10%, rgba(245,166,35,0.10), transparent)",
+      }}
     >
       {phase !== "done" && (
         <header className="animate-fade-in-up mb-10 flex w-full max-w-[420px] flex-col items-center gap-2 text-center">
-          <h1 className="text-[32px] font-bold leading-[1.1] tracking-[-0.03em] text-text">res-extract</h1>
+          <h1 className="font-editorial text-[24px] font-semibold leading-[1.15] tracking-[-0.005em] text-text">
+            res-extract
+          </h1>
           <p className="w-full text-[15px] text-text-muted">
             Paste a cooking Short or Reel — get the recipe, step by step.
           </p>

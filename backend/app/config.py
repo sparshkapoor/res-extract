@@ -39,9 +39,17 @@ class Settings(BaseSettings):
     # memory even though ASR is unloaded by then. ~3.5GB peak observed.
     vlm_model_name: str = "mlx-community/Qwen2.5-VL-3B-Instruct-4bit"
 
-    # Empty-transcript guard (silent-cooking videos are out of MVP scope)
+    # Empty-transcript guard — below this, narration is too sparse to trust on
+    # its own, so the pipeline falls back to vision-based narration instead of
+    # failing outright (see vision_narration.py).
     empty_transcript_min_chars: int = 40
     empty_transcript_min_words: int = 8
+
+    # Vision-narration fallback (silent/low-narration videos). Bounded frame
+    # count keeps this from ballooning runtime on longer videos — each sampled
+    # frame costs one OCR call + one sequential VLM call.
+    vision_narration_max_frames: int = 18
+    vision_narration_min_interval_seconds: float = 1.5
 
     # Instagram auth (yt-dlp needs a cookie export; see deploy notes)
     instagram_cookies_file: Path | None = None

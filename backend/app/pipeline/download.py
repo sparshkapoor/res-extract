@@ -22,6 +22,7 @@ class VideoAsset:
     duration_seconds: float
     platform: Platform
     title: str
+    description: str
 
 
 def _download_sync(url: str, platform: Platform, out_dir: Path) -> VideoAsset:
@@ -85,6 +86,11 @@ def _download_sync(url: str, platform: Platform, out_dir: Path) -> VideoAsset:
             duration_seconds=float(info.get("duration") or 0.0),
             platform=platform,
             title=info.get("title") or "Untitled recipe",
+            # yt-dlp normalizes each site's extractor-specific field (Instagram's
+            # caption text, YouTube's video description) into this same key — no
+            # per-platform branching needed, and no extra network call since it's
+            # already part of the same extract_info() response.
+            description=info.get("description") or "",
         )
 
     raise DownloadError(f"yt-dlp failed to download {url} after {_MAX_ATTEMPTS} attempts: {last_error}")

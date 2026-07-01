@@ -15,7 +15,7 @@ async def extract_frame(video_path: Path, timestamp_seconds: float, out_path: Pa
         "-ss", f"{max(timestamp_seconds, 0):.3f}",
         "-i", str(video_path),
         "-frames:v", "1",
-        "-q:v", "3",
+        "-q:v", "2",
         str(out_path),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,

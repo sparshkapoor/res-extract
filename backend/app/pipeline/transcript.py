@@ -71,3 +71,13 @@ async def get_transcript(url: str, platform: Platform, video_path: Path, out_dir
 
     audio_path = await _extract_audio(video_path, out_dir)
     return await asr.transcribe(audio_path)
+
+
+def merge(real: TranscriptResult, vision: TranscriptResult) -> TranscriptResult:
+    """Blend real (sparse but non-empty) narration with a synthesized vision
+    transcript, sorted by start time. Used when the real transcript has *some*
+    content but not enough to clear the empty-transcript guard on its own —
+    see orchestrator.py's narration-guard block. `source="blended"` so the
+    job's stage message and cached result stay honest about provenance."""
+    segments = sorted([*real.segments, *vision.segments], key=lambda s: s.start)
+    return TranscriptResult(segments=segments, source="blended")

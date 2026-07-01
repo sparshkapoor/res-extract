@@ -69,6 +69,27 @@ def test_ingredient_dedup_is_noop_when_no_duplication():
     assert ing.unit == "tsp"
 
 
+def test_ingredient_dedup_handles_plural_unit_singular_in_quantity():
+    # Regression test: observed in production — quantity="1 cup", unit="cups"
+    # (plural unit, singular word embedded in quantity) previously survived
+    # as "1 cup cups" because the old regex only matched the exact unit
+    # string, never a simple singular/plural variant.
+    ing = Ingredient(name="yogurt", quantity="1 cup", unit="cups")
+    assert ing.quantity == "1"
+    assert ing.unit == "cups"
+
+
+def test_ingredient_dedup_handles_singular_unit_plural_in_quantity():
+    ing = Ingredient(name="garlic", quantity="3 cloves", unit="clove")
+    assert ing.quantity == "3"
+    assert ing.unit == "clove"
+
+
+def test_ingredient_name_is_generic_defaults_false():
+    ing = Ingredient(name="spices")
+    assert ing.name_is_generic is False
+
+
 def test_job_status_values_match_pipeline_stage_names():
     # These string values are persisted in SQLite and sent over SSE, so
     # renaming the enum members would silently break stored/streamed state.

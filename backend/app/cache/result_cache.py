@@ -21,7 +21,10 @@ async def list_cached() -> list[dict]:
     results = []
     for row in rows:
         recipe = Recipe.model_validate_json(row["recipe_json"])
-        thumbnail = next((s.image_path for s in recipe.steps if s.image_path), None)
+        # Last available frame, not first — matches the frontend's hero pick
+        # (RecipeCard.tsx) so the grid thumbnail and the detail-view hero show
+        # the same frame for a given recipe.
+        thumbnail = next((s.image_path for s in reversed(recipe.steps) if s.image_path), None)
         results.append(
             {
                 "url_hash": row["url_hash"],

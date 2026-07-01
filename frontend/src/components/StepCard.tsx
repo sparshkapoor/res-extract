@@ -1,20 +1,18 @@
+import { forwardRef } from "react";
 import { ImageBroken } from "@phosphor-icons/react";
 import type { Step } from "../types/recipe";
-import { staggerStyle } from "../lib/motion";
 
 interface StepCardProps {
   step: Step;
-  staggerIndex?: number;
 }
 
 // Flat precision card — thumbnail and text side by side, hairline border, no
 // shadow/blur (this isn't a photo-backed glass surface, it's chrome around one).
-export function StepCard({ step, staggerIndex = 0 }: StepCardProps) {
+// Entrance motion is owned by the parent's useScrollReveal (recipe-detail page
+// only) — this card no longer runs its own CSS mount animation.
+export const StepCard = forwardRef<HTMLDivElement, StepCardProps>(function StepCard({ step }, ref) {
   return (
-    <div
-      className="animate-fade-in-up flex items-start gap-3 rounded-md border border-hairline bg-surface-2 p-3"
-      style={staggerStyle(staggerIndex)}
-    >
+    <div ref={ref} className="flex items-start gap-3 rounded-md border border-hairline bg-surface-2 p-3">
       <div className="h-[76px] w-[76px] shrink-0 overflow-hidden rounded-sm bg-surface-1">
         {step.image_path ? (
           <img
@@ -37,4 +35,4 @@ export function StepCard({ step, staggerIndex = 0 }: StepCardProps) {
       </div>
     </div>
   );
-}
+});

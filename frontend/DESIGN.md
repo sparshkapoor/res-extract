@@ -1,7 +1,7 @@
 ---
 version: 1.0
 name: res-extract-dark
-description: A from-scratch dark design system built on two ideas held in tension. Chrome (nav, filter chips, search, progress, buttons) is Linear-style engineered precision — flat near-black surfaces, hairline borders, monospace for every number, tight negative tracking on headlines. Recipe cards and the recipe hero are genuine Apple-style liquid glass — frosted translucent panels over food photography, because glass only earns its shadow and blur when there's a photo behind it worth revealing. One accent color, warm amber, used constantly and deliberately.
+description: A from-scratch dark design system built on two ideas held in tension. Chrome (nav, filter chips, search, progress, buttons) is Linear-style engineered precision — flat near-black surfaces, hairline borders, monospace for every number, tight negative tracking on headlines. Recipe cards and the recipe hero are genuine Apple-style liquid glass — frosted translucent panels over food photography, because glass only earns its shadow and blur when there's a photo behind it worth revealing. Headlines carry a third voice — Fraunces, an editorial serif (NYT Cooking / Food & Wine register) — held in the same tension: precision chrome stays Inter/mono, storytelling headlines go serif. One accent color, warm amber, used constantly and deliberately.
 
 colors:
   canvas: "#0a0a0b"
@@ -23,6 +23,27 @@ colors:
   danger: "#e5484d"
 
 typography:
+  headline-display:
+    fontFamily: "Fraunces, Georgia, serif"
+    fontSize: 40px
+    fontWeight: 700
+    fontStyle: normal
+    lineHeight: 1.05
+    letterSpacing: -0.01em
+  headline-display-sm:
+    fontFamily: "Fraunces, Georgia, serif"
+    fontSize: 24px
+    fontWeight: 600
+    fontStyle: normal
+    lineHeight: 1.15
+    letterSpacing: -0.005em
+  headline-section-italic:
+    fontFamily: "Fraunces, Georgia, serif"
+    fontSize: 21px
+    fontWeight: 600
+    fontStyle: italic
+    lineHeight: 1.2
+    letterSpacing: 0em
   headline-xl:
     fontFamily: "Inter, system-ui, sans-serif"
     fontSize: 32px
@@ -100,7 +121,10 @@ motion:
   stagger-step: "60ms per sibling via --stagger-index"
   hover-lift: "translateY(-4px) scale(1.015), 200ms ease-out"
   shimmer: "background-position sweep, 1.6s linear infinite"
-  reduced-motion: "single global @media (prefers-reduced-motion: reduce) rule disables all animation/transition"
+  ambient-drift: "background-position + opacity drift on the canvas glow, 14s ease-in-out infinite, app-wide"
+  hero-focus-pull: "GSAP ScrollTrigger scrub — hero image filter:blur(8px)->0 + scale(1.15)->1.0, glass panel translateY/opacity settle, tied to scroll progress over the hero zone"
+  scroll-reveal: "GSAP ScrollTrigger — fade+rise as an element enters the viewport, recipe-detail ingredient rows and step cards only"
+  reduced-motion: "single global @media (prefers-reduced-motion: reduce) rule disables all CSS animation/transition; GSAP call sites separately guard via lib/gsap.ts's prefersReducedMotion() since JS-driven tweens aren't reached by the CSS rule"
 
 components:
   button-primary:
@@ -149,6 +173,11 @@ components:
     backgroundColor: "{colors.surface-2}"
     shimmerColor: "{colors.surface-3}"
     rounded: "{rounded.md}"
+  metadata-icon-value:
+    iconColor: "{colors.accent} on highlight, {colors.text-muted} otherwise"
+    iconSize: 15px
+    typography: "{typography.data-lg}"
+    gap: 6px
 ---
 
 ## Overview
@@ -240,8 +269,14 @@ on a large headline is the single fastest AI-slop tell, and this system never do
 ## Typography
 
 ### Font Families
-- **Prose**: Inter (400/500/600/700), loaded via Google Fonts. Headlines, body,
-  captions, eyebrow labels, button labels.
+- **Editorial**: Fraunces (400/500/600/700, italic + normal), loaded via Google
+  Fonts. The storytelling voice — every headline that names a recipe or a section:
+  the `res-extract` app title, grid-tile captions, the recipe-detail title, and the
+  "Ingredients"/"Steps" section heads. Never used for functional chrome (buttons,
+  inputs, eyebrow labels) — that boundary is what keeps the precision/editorial
+  tension legible instead of muddled.
+- **Prose**: Inter (400/500/600/700), loaded via Google Fonts. Body copy, captions,
+  eyebrow labels, button labels — everything functional that isn't a number.
 - **Data**: JetBrains Mono (400/600), loaded via Google Fonts. Every number that is
   data, full stop: `cook_time_minutes`, `servings`, `calories`, `oven_temp_f`, step
   index badges. Ingredient quantities stay in Inter (they're prose fragments like
@@ -252,9 +287,12 @@ on a large headline is the single fastest AI-slop tell, and this system never do
 
 | Token | Size | Weight | Tracking | Use |
 |---|---|---|---|---|
-| `{typography.headline-xl}` | 32px | 700 | -0.03em | Recipe title on the detail hero |
-| `{typography.headline-lg}` | 24px | 700 | -0.025em | App name / top-level screen heads |
-| `{typography.headline-md}` | 19px | 600 | -0.02em | Section heads: "Ingredients", "Steps" |
+| `{typography.headline-display}` | 40px | 700 serif | -0.01em | Recipe title on the detail hero |
+| `{typography.headline-display-sm}` | 24px | 600 serif | -0.005em | `res-extract` app title, grid-tile captions |
+| `{typography.headline-section-italic}` | 21px | 600 serif italic | 0em | Section heads: "Ingredients", "Steps" |
+| `{typography.headline-xl}` | 32px | 700 | -0.03em | Reserved for future functional (non-editorial) large headings — currently unused now that the title moved to `headline-display` |
+| `{typography.headline-lg}` | 24px | 700 | -0.025em | Reserved for future functional large sans headings |
+| `{typography.headline-md}` | 19px | 600 | -0.02em | Reserved for future functional sans section heads |
 | `{typography.eyebrow}` | 11px | 700 | 0.08em, uppercase | "Step N", "YouTube"/"Instagram" tag, any label-as-navigation |
 | `{typography.body}` | 15px | 400 | 0 | Paragraph copy, instructions, ingredient names |
 | `{typography.body-strong}` | 15px | 600 | 0 | Button labels, emphasized inline copy |
@@ -263,8 +301,19 @@ on a large headline is the single fastest AI-slop tell, and this system never do
 | `{typography.data-sm}` | 12px | 500 | 0 | Step-index badges, compact inline numbers |
 
 ### Principles
-- **Negative tracking is mandatory at ≥19px, forbidden below 13px.** Flat tracking
-  on a headline-sized element is the fastest tell this system exists to avoid.
+- **Editorial vs. precision is a typeface boundary, not a vibe.** If it names a
+  recipe or a section ("Caramelized Onion One Tray Baked Pasta", "Ingredients"), it's
+  Fraunces. If it's functional (a button label, an eyebrow tag, a data value), it's
+  Inter or JetBrains Mono. Never mix a serif into chrome or a sans headline into
+  storytelling copy — that's what keeps two typefaces reading as one coherent system
+  instead of two unrelated ones stapled together.
+- **Fraunces headlines don't use the sans tight-tracking rule.** Editorial serifs
+  read better at looser (or even 0) tracking — `headline-display` sits at only
+  `-0.01em`, `headline-section-italic` at `0em`. The `-0.02em`-to`-0.03em` rule below
+  is specific to `{typography.headline-xl}`/`headline-lg`/`headline-md` (Inter).
+- **Negative tracking is mandatory at ≥19px, forbidden below 13px** (Inter headline
+  tokens only — see above). Flat tracking on a sans headline-sized element is the
+  fastest tell this system exists to avoid.
 - **Numbers are never Inter.** The instant a value is "data" (a count, a duration, a
   temperature), it moves to `{typography.data-lg}` or `{typography.data-sm}`.
 - **Uppercase eyebrow labels are the only navigational structure.** No breadcrumbs,

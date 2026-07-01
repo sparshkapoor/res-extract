@@ -48,6 +48,11 @@ amount for that ingredient in a dish like this, based on common recipe conventio
 "1/2 tsp"). Set `is_estimated=true` on any ingredient whose quantity/unit you estimated this way, and \
 `is_estimated=false` when the quantity/unit came directly from the transcript or on-screen text. Never \
 mark a stated quantity as estimated, and never leave an estimate unmarked.
+- If an ingredient is only ever referred to generically (e.g. "spices", "seasoning", "herbs") and never \
+named specifically anywhere in the transcript, use the plain generic category word as `name` — e.g. \
+name="spices" — and set `name_is_generic=true`. NEVER fabricate a parenthetical qualifier like "spices \
+(not specified)" or "seasoning (unspecified)" as the name itself; the plain word plus the flag is the \
+correct way to represent this. Set `name_is_generic=false` for every specifically-named ingredient.
 """
 
 
@@ -79,6 +84,32 @@ def _build_pass2_prompt(ingredients_json: str, ocr_text: str) -> str:
         "the transcript. If OCR gives you a real quantity for an ingredient that was previously estimated, "
         "set is_estimated=false for it. Keep every ingredient name and count exactly the same — do not "
         "add, remove, or reorder ingredients. "
+        "Output the full revised ingredients list as a JSON object matching the schema."
+    )
+
+
+def _build_description_prompt(ingredients_json: str, description_text: str) -> str:
+    # Same "ingredients only, never touch steps" scoping as _build_pass2_prompt,
+    # and the same reasoning applies: steps are already citation-grounded after
+    # pass 1, and a video description has no timestamps to ground a step with.
+    return (
+        "Here are the ingredients already extracted from a video's spoken transcript:\n"
+        f"{ingredients_json}\n\n"
+        "Here is the video's own written description, straight from the creator "
+        "(this is often MORE authoritative than the spoken transcript for exact "
+        "ingredient names and quantities — creators write these down precisely, "
+        "rather than saying them casually on camera):\n"
+        f"{description_text}\n\n"
+        "Revise the ingredients using the description as follows:\n"
+        "- If the description states a more specific name or an exact quantity/unit for an "
+        "ingredient that's currently estimated or generic, use the description's value and set "
+        "is_estimated=false.\n"
+        "- If a generic ingredient (name_is_generic=true, e.g. name=\"spices\") corresponds to an "
+        "itemized breakdown in the description (e.g. \"Spices: 1 tsp salt, 1 tsp black pepper, "
+        "1 tsp cinnamon\"), REPLACE that one generic ingredient with one Ingredient per item listed, "
+        "each with its stated quantity/unit, is_estimated=false, and name_is_generic=false.\n"
+        "- Never invent an ingredient that isn't in either the current list or the description.\n"
+        "- Never delete an ingredient the description doesn't happen to mention — leave it as-is.\n"
         "Output the full revised ingredients list as a JSON object matching the schema."
     )
 
@@ -164,5 +195,27 @@ async def refine_ingredients_with_ocr(ingredients: list[Ingredient], ocr_text: s
         # The model didn't follow the "don't add/remove ingredients"
         # instruction — can't trust the alignment, so keep the originals
         # rather than risk silently dropping or duplicating an ingredient.
+        return ingredients
+    return refined.ingredients
+
+
+async def refine_ingredients_with_description(
+    ingredients: list[Ingredient], description_text: str
+) -> list[Ingredient]:
+    """Unlike refine_ingredients_with_ocr, this pass IS allowed to change the
+    ingredient count — a generic ingredient (name_is_generic=true) can
+    legitimately expand into several specific ones when the description
+    itemizes it (e.g. "spices" -> salt/pepper/cumin/paprika/... each with a
+    real stated quantity). No alignment-by-index safety net here since the
+    count is expected to change; the prompt itself is the guardrail (never
+    invent items absent from both sources, never drop unmentioned ones)."""
+    ingredients_json = _IngredientsOnly(ingredients=ingredients).model_dump_json()
+    prompt = _build_description_prompt(ingredients_json, description_text)
+    raw = await asyncio.to_thread(_chat_sync, prompt, _IngredientsOnly)
+    refined = _IngredientsOnly.model_validate(raw)
+
+    if not refined.ingredients:
+        # The model returned nothing usable — keep the originals rather than
+        # silently emptying the ingredient list.
         return ingredients
     return refined.ingredients

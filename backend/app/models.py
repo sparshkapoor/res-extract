@@ -59,6 +59,11 @@ class Ingredient(BaseModel):
         description="True when quantity/unit were not stated in the transcript or on-screen "
         "text and were instead estimated from typical recipe conventions for this dish.",
     )
+    name_is_generic: bool = Field(
+        default=False,
+        description="True when `name` is a generic category (e.g. 'spices', 'seasoning') "
+        "because the transcript/on-screen text never named it specifically.",
+    )
 
     @model_validator(mode="after")
     def _dedupe_unit_from_quantity(self) -> "Ingredient":
@@ -68,8 +73,17 @@ class Ingredient(BaseModel):
         # "1.8 kg kg" when the two are joined for display. Centralizing the
         # cleanup here — rather than in each call site — means every
         # current and future path gets it for free.
+        #
+        # Matches simple singular/plural variants too, not just the exact
+        # unit string: quantity="1 cup", unit="cups" previously survived as
+        # "1 cup cups" because "cups" (the unit) is not a substring of "cup"
+        # (what's actually embedded in quantity).
         if self.quantity and self.unit:
-            pattern = re.compile(rf"(^|\s){re.escape(self.unit.strip())}(\s|$)", re.IGNORECASE)
+            unit_word = self.unit.strip()
+            variants = {unit_word}
+            variants.add(unit_word[:-1] if unit_word.endswith("s") else unit_word + "s")
+            alternation = "|".join(re.escape(v) for v in variants if v)
+            pattern = re.compile(rf"(^|\s)(?:{alternation})(\s|$)", re.IGNORECASE)
             cleaned = pattern.sub(" ", self.quantity).strip()
             # Bypass pydantic's validated __setattr__ here — going through
             # `self.quantity = ...` would re-trigger this same validator

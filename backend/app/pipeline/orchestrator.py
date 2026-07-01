@@ -5,7 +5,17 @@ from app.cache import result_cache
 from app.config import get_settings
 from app.jobs import job_manager
 from app.models import JobStatus, Platform, Recipe
-from app.pipeline import citation_map, download, extract_recipe, frames, ocr, transcript, vlm
+from app.pipeline import (
+    citation_map,
+    download,
+    extract_recipe,
+    frames,
+    ocr,
+    spellcheck,
+    transcript,
+    vision_narration,
+    vlm,
+)
 from app.pipeline.url_utils import detect_platform, normalize_url, sha256_of_url
 
 logger = logging.getLogger(__name__)
@@ -43,11 +53,30 @@ async def run_pipeline(job_id: str, raw_url: str) -> None:
             f"Transcript ready ({transcript_result.source}, {len(full_text)} chars)",
         )
 
-        # --- 4. Empty-transcript guard -------------------------------------
+        # --- 4. Narration guard: fall back to vision if narration is too sparse ---
+        # Below this bar, real narration can't be trusted on its own — but rather
+        # than fail outright, synthesize a vision-grounded transcript (VLM action
+        # captions + per-frame OCR, sampled across the video) and feed THAT through
+        # the exact same downstream pipeline. See vision_narration.py.
         word_count = len(full_text.split())
         if len(full_text) < settings.empty_transcript_min_chars or word_count < settings.empty_transcript_min_words:
-            raise PipelineError(
-                "No narration detected — silent-cooking videos are out of scope for this MVP."
+            await job_manager.update_status(
+                job_id, JobStatus.transcribing, "No narration detected — analyzing video frames instead..."
+            )
+            vision_transcript = await vision_narration.build_vision_transcript(
+                video_asset.video_path, video_asset.duration_seconds, job_frames_dir, settings
+            )
+            if not vision_transcript.segments:
+                raise PipelineError(
+                    "No narration and no usable visual content detected in this video."
+                )
+            transcript_result = (
+                vision_transcript if word_count == 0 else transcript.merge(transcript_result, vision_transcript)
+            )
+            full_text = transcript_result.full_text
+            await job_manager.update_status(
+                job_id, JobStatus.transcribed,
+                f"Transcript ready ({transcript_result.source}, {len(full_text)} chars)",
             )
 
         # --- 5. LLM pass 1: transcript -> Recipe ----------------------------
@@ -57,6 +86,19 @@ async def run_pipeline(job_id: str, raw_url: str) -> None:
 
         if not recipe.steps:
             raise PipelineError("LLM extraction produced no recipe steps from this transcript.")
+
+        # --- 5b. Refine ingredients with the video's own written description ---
+        # Runs before OCR refinement so OCR only has to incrementally improve an
+        # already-good list, not start from raw transcript-only extraction.
+        # Ingredients have no citation requirement (unlike steps), so this
+        # non-timestamped text is safe to use here the same way OCR text is.
+        if video_asset.description.strip():
+            await job_manager.update_status(
+                job_id, JobStatus.extracting, "Refining ingredients from video description..."
+            )
+            recipe.ingredients = await extract_recipe.refine_ingredients_with_description(
+                recipe.ingredients, video_asset.description
+            )
 
         # --- 6. Citation -> timestamp mapping ---------------------------------
         recipe.steps, unmatched_count = citation_map.map_steps_to_timestamps(
@@ -108,15 +150,28 @@ async def run_pipeline(job_id: str, raw_url: str) -> None:
         await job_manager.update_status(job_id, JobStatus.extracted, "Proofreading steps...")
         recipe.steps = await extract_recipe.proofread_steps(recipe.steps)
 
-        # --- 10. VLM vision pass: ground still-estimated quantities in the step photos ---
-        if any(ing.is_estimated for ing in recipe.ingredients):
+        # --- 9c. Deterministic (non-LLM) spelling cleanup on step text ----------------
+        # Complementary to 9b, not a replacement: the LLM proofread checks
+        # citation-faithfulness; this catches literal misspellings (residual ASR
+        # garble) the LLM had no particular reason to flag as suspicious.
+        recipe.steps = spellcheck.clean_step_text(recipe.steps)
+
+        # --- 10. VLM vision pass: ground still-estimated quantities AND still-generic ---
+        # ingredient names (e.g. "spices") in the step photos. The identify task only
+        # ever runs for ingredients still name_is_generic=true at this point — i.e.
+        # description-refinement (5b) had a description to work with but didn't
+        # resolve this one, or there was no description at all. (OCR-refinement at
+        # step 9 is deliberately quantity/unit-only — it never renames ingredients,
+        # see _build_pass2_prompt — so it can't have already resolved this.) This is
+        # the last-resort visual fallback, after every text-based source has failed.
+        if any(ing.is_estimated or ing.name_is_generic for ing in recipe.ingredients):
             await job_manager.update_status(job_id, JobStatus.ocr, "Estimating quantities from photos...")
             try:
                 recipe = await vlm.refine_estimates_with_vision(recipe, job_frames_dir)
             except vlm.VlmError as e:
                 # Vision refinement is a best-effort enrichment on top of the
                 # text-only estimate already in hand — never fail the job over it.
-                logger.warning("VLM quantity refinement failed, keeping text-only estimates: %s", e)
+                logger.warning("VLM quantity/identify refinement failed, keeping text-only estimates: %s", e)
 
         # --- 11. Cache write -------------------------------------------------------
         url_hash = sha256_of_url(url)
