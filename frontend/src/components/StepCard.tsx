@@ -1,5 +1,6 @@
 import { ImageBroken } from "@phosphor-icons/react";
 import type { Step } from "../types/recipe";
+import { staggerStyle } from "../lib/motion";
 
 interface StepCardProps {
   step: Step;
@@ -12,7 +13,7 @@ export function StepCard({ step, staggerIndex = 0 }: StepCardProps) {
   return (
     <div
       className="animate-fade-in-up flex items-start gap-3 rounded-md border border-hairline bg-surface-2 p-3"
-      style={{ "--stagger-index": staggerIndex }}
+      style={staggerStyle(staggerIndex)}
     >
       <div className="h-[76px] w-[76px] shrink-0 overflow-hidden rounded-sm bg-surface-1">
         {step.image_path ? (

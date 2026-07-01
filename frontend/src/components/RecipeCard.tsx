@@ -2,6 +2,7 @@ import { ArrowLeft } from "@phosphor-icons/react";
 import type { Recipe } from "../types/recipe";
 import { StepCard } from "./StepCard";
 import { GlassCard } from "./ui/GlassCard";
+import { staggerStyle } from "../lib/motion";
 
 interface RecipeCardProps {
   recipe: Recipe;
@@ -25,7 +26,7 @@ export function RecipeCard({ recipe, onReset }: RecipeCardProps) {
 
   return (
     <div className="flex w-full max-w-[560px] flex-col bg-canvas pb-10">
-      <div className="relative -mt-10 aspect-[4/3] w-full overflow-hidden bg-surface-2 animate-fade-in-up" style={{ "--stagger-index": 0 }}>
+      <div className="relative -mt-10 aspect-[4/3] w-full overflow-hidden bg-surface-2 animate-fade-in-up" style={staggerStyle(0)}>
         {heroImage && <img src={heroImage} alt={recipe.title} className="h-full w-full object-cover" />}
         {/* Scrim sits between the photo and the glass layer — protects title
             legibility without making the glass panel itself opaque. */}
@@ -59,7 +60,7 @@ export function RecipeCard({ recipe, onReset }: RecipeCardProps) {
       </div>
 
       <div className="flex flex-col gap-8 px-4 pt-6">
-        <section className="animate-fade-in-up" style={{ "--stagger-index": 1 }}>
+        <section className="animate-fade-in-up" style={staggerStyle(1)}>
           <h2 className="mb-3 text-[19px] font-semibold leading-[1.2] tracking-[-0.02em] text-text">
             Ingredients
           </h2>
@@ -84,7 +85,7 @@ export function RecipeCard({ recipe, onReset }: RecipeCardProps) {
           </div>
         </section>
 
-        <section className="animate-fade-in-up" style={{ "--stagger-index": 2 }}>
+        <section className="animate-fade-in-up" style={staggerStyle(2)}>
           <h2 className="mb-3 text-[19px] font-semibold leading-[1.2] tracking-[-0.02em] text-text">Steps</h2>
           <div className="flex flex-col gap-2">
             {recipe.steps.map((step, i) => (

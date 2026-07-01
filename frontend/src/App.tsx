@@ -3,6 +3,7 @@ import { BookmarkSimple } from "@phosphor-icons/react";
 import { submitUrl, fetchResult, fetchSavedRecipe, ApiError } from "./api/client";
 import { useJobStream } from "./hooks/useJobStream";
 import { UrlSubmitForm } from "./components/UrlSubmitForm";
+import { staggerStyle } from "./lib/motion";
 import { ProgressView } from "./components/ProgressView";
 import { RecipeCard } from "./components/RecipeCard";
 import { SavedRecipesList } from "./components/SavedRecipesList";
@@ -79,22 +80,22 @@ function App() {
     <div
       className={
         isDone
-          ? "flex min-h-[100dvh] w-full min-w-0 flex-col items-center overflow-x-hidden bg-surface-tile-1"
-          : "safe-top safe-bottom flex min-h-[100dvh] w-full min-w-0 flex-col items-center overflow-x-hidden bg-canvas-parchment px-6 py-10"
+          ? "flex min-h-[100dvh] w-full min-w-0 flex-col items-center overflow-x-hidden bg-canvas"
+          : "safe-top safe-bottom flex min-h-[100dvh] w-full min-w-0 flex-col items-center overflow-x-hidden bg-canvas px-6 py-10"
       }
       style={
         !isDone
           ? {
               backgroundImage:
-                "radial-gradient(ellipse 80% 50% at 50% -10%, rgba(0,124,240,0.16), transparent), radial-gradient(ellipse 60% 40% at 100% 10%, rgba(0,223,216,0.12), transparent)",
+                "radial-gradient(ellipse 80% 50% at 50% -10%, rgba(245,166,35,0.10), transparent)",
             }
           : undefined
       }
     >
       {phase !== "done" && (
-        <header className="mb-10 flex w-full max-w-[420px] flex-col items-center gap-2 text-center">
-          <h1 className="text-[40px] font-semibold leading-[1.1] tracking-[0] text-ink">res-extract</h1>
-          <p className="w-full text-[17px] text-ink-muted-48">
+        <header className="animate-fade-in-up mb-10 flex w-full max-w-[420px] flex-col items-center gap-2 text-center">
+          <h1 className="text-[32px] font-bold leading-[1.1] tracking-[-0.03em] text-text">res-extract</h1>
+          <p className="w-full text-[15px] text-text-muted">
             Paste a cooking Short or Reel — get the recipe, step by step.
           </p>
         </header>
@@ -102,7 +103,10 @@ function App() {
 
       <main className="flex w-full min-w-0 flex-1 flex-col items-center">
         {(phase === "idle" || phase === "submitting" || phase === "error") && (
-          <div className="flex w-full max-w-[560px] flex-col items-center gap-6">
+          <div
+            className="animate-fade-in-up flex w-full max-w-[560px] flex-col items-center gap-6"
+            style={staggerStyle(1)}
+          >
             <UrlSubmitForm onSubmit={handleSubmit} submitting={phase === "submitting"} error={submitError} />
             {/* Generously spaced from the form above (gap-6) and sized as a
                 real tap target (min-h-[44px]) so it's never fat-fingered
@@ -110,7 +114,7 @@ function App() {
             <button
               type="button"
               onClick={() => setPhase("saved")}
-              className="press-scale flex min-h-[44px] items-center gap-2 px-2 text-[15px] font-medium text-primary"
+              className="press-scale flex min-h-[44px] items-center gap-2 px-2 text-[15px] font-medium text-accent"
             >
               <BookmarkSimple size={18} weight="bold" />
               View saved recipes
@@ -119,11 +123,11 @@ function App() {
         )}
 
         {phase === "saved" && (
-          <div className="flex w-full max-w-[560px] flex-col gap-5">
+          <div className="animate-fade-in-up flex w-full max-w-[560px] flex-col gap-5">
             <button
               type="button"
               onClick={() => setPhase("idle")}
-              className="press-scale flex min-h-[44px] items-center gap-1.5 self-start text-[14px] text-primary"
+              className="press-scale flex min-h-[44px] items-center gap-1.5 self-start text-[14px] text-accent"
             >
               Back
             </button>

@@ -5,6 +5,7 @@ import type { SavedRecipeSummary } from "../types/recipe";
 import { SearchBar } from "./SearchBar";
 import { FilterChips, type PlatformFilter } from "./FilterChips";
 import { Skeleton } from "./ui/Skeleton";
+import { staggerStyle } from "../lib/motion";
 
 interface SavedRecipesListProps {
   onSelect: (urlHash: string) => void;
@@ -74,7 +75,7 @@ export function SavedRecipesList({ onSelect }: SavedRecipesListProps) {
               type="button"
               onClick={() => onSelect(r.url_hash)}
               className="group press-scale animate-fade-in-up relative aspect-[4/5] overflow-hidden rounded-lg bg-surface-2 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.35)] transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-1 hover:scale-[1.015] hover:shadow-[0_20px_40px_-12px_rgba(0,0,0,0.5)]"
-              style={{ "--stagger-index": i }}
+              style={staggerStyle(i)}
             >
               {r.thumbnail ? (
                 <img src={r.thumbnail} alt="" className="h-full w-full object-cover" loading="lazy" />
