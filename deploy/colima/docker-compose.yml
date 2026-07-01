@@ -6,15 +6,15 @@
 # architecture works around.
 services:
   nginx:
-    build: .
+    # Build context is the repo root (not this directory) so the Dockerfile
+    # can COPY in frontend/dist -- see Dockerfile for why nothing here is
+    # runtime bind-mounted anymore.
+    build:
+      context: ../..
+      dockerfile: deploy/colima/Dockerfile
     ports:
       # Pick a free host port -- check `docker ps` first if this machine
       # runs other projects, since 8080 is a common default that may
       # already be taken.
       - "8090:80"
-    volumes:
-      # Directory bind-mounts are reliable under Colima's virtiofs; only the
-      # single-file nginx.conf mount was problematic, so that's baked into
-      # the image instead (see Dockerfile) rather than mounted here.
-      - ../../frontend/dist:/usr/share/nginx/html:ro
     restart: unless-stopped
