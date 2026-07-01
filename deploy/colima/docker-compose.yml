@@ -6,10 +6,12 @@
 # architecture works around.
 services:
   nginx:
-    image: nginx:alpine
+    build: .
     ports:
       - "8080:80"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      # Directory bind-mounts are reliable under Colima's virtiofs; only the
+      # single-file nginx.conf mount was problematic, so that's baked into
+      # the image instead (see Dockerfile) rather than mounted here.
       - ../../frontend/dist:/usr/share/nginx/html:ro
     restart: unless-stopped
