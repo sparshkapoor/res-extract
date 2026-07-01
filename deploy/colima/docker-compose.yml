@@ -8,7 +8,9 @@ services:
   nginx:
     build: .
     ports:
-      - "8080:80"
+      # 8080 is already taken by another project's stack running on this
+      # shared server (flightselect_nginx) -- do not reuse it.
+      - "8090:80"
     volumes:
       # Directory bind-mounts are reliable under Colima's virtiofs; only the
       # single-file nginx.conf mount was problematic, so that's baked into

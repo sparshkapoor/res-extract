@@ -80,7 +80,10 @@ Colima's nginx container is deliberately small and does nothing but serve
 services to `docker-compose.yml` — see the comments in that file and
 `nginx.conf` for why.
 
-The app is then reachable on the LAN at `http://<m1-air-hostname>.local:8080`.
+The app is then reachable on the LAN at `http://<m1-air-hostname>.local:8090`.
+(Port 8080 is deliberately avoided — on a shared server it may already be
+in use by another project's stack. Check `docker ps` first and adjust the
+port in `docker-compose.yml` if 8090 is also taken.)
 
 ## 4. Instagram cookies
 
