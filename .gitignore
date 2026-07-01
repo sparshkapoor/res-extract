@@ -141,3 +141,22 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Runtime data (downloaded videos, extracted frames, SQLite DB, cookies)
+backend/storage/
+
+# Local tool/agent configuration (personal, not shared project config)
+.claude/
+.agents/
+skills-lock.json
+
+# Design-reference scratch files from getdesign (not the active DESIGN.md)
+frontend/vercel/
+frontend/figma/
+frontend/theverge/

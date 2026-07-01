@@ -1,0 +1,15 @@
+# Single service, intentionally: nginx only. Everything hardware-dependent
+# (Ollama, mlx-whisper, mlx-vlm, ocrmac, ffmpeg, yt-dlp) runs bare-metal on
+# the host via launchd (see deploy/launchd/), reached from here through
+# host.lima.internal. Do not add a backend/app service to this file — that
+# would silently reintroduce the exact Docker-on-Apple-Silicon problem this
+# architecture works around.
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../../frontend/dist:/usr/share/nginx/html:ro
+    restart: unless-stopped
