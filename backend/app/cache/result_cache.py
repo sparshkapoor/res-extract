@@ -21,10 +21,13 @@ async def list_cached() -> list[dict]:
     results = []
     for row in rows:
         recipe = Recipe.model_validate_json(row["recipe_json"])
-        # Last available frame, not first — matches the frontend's hero pick
-        # (RecipeCard.tsx) so the grid thumbnail and the detail-view hero show
-        # the same frame for a given recipe.
-        thumbnail = next((s.image_path for s in reversed(recipe.steps) if s.image_path), None)
+        # Prefer the dedicated hero shot (VLM-selected finished-dish frame,
+        # independent of any step) over any step's own instructional frame —
+        # matches the frontend's hero pick (RecipeCard.tsx). Falls back to the
+        # last step's frame for recipes cached before hero_image_path existed.
+        thumbnail = recipe.hero_image_path or next(
+            (s.image_path for s in reversed(recipe.steps) if s.image_path), None
+        )
         results.append(
             {
                 "url_hash": row["url_hash"],
@@ -65,6 +68,9 @@ async def write_cache(url_hash: str, url: str, recipe: Recipe, job_frames_dir: P
         if step.image_path:
             filename = Path(step.image_path).name
             step.image_path = f"/media/cache/{url_hash}/{filename}"
+    if cached_recipe.hero_image_path:
+        filename = Path(cached_recipe.hero_image_path).name
+        cached_recipe.hero_image_path = f"/media/cache/{url_hash}/{filename}"
 
     async with get_db() as db:
         await db.execute(

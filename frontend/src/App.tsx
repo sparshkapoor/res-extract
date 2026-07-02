@@ -16,8 +16,21 @@ function App() {
   const [jobId, setJobId] = useState<string | null>(null);
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const stream = useJobStream(phase === "processing" ? jobId : null);
+
+  // Client-side elapsed timer — avoids clock-skew issues a server-timestamp
+  // comparison would have, and needs no backend support.
+  useEffect(() => {
+    if (phase !== "processing") {
+      setElapsedSeconds(0);
+      return;
+    }
+    const startedAt = Date.now();
+    const id = window.setInterval(() => setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000)), 1000);
+    return () => window.clearInterval(id);
+  }, [phase]);
 
   useEffect(() => {
     if (phase !== "processing" || !jobId) return;
@@ -133,7 +146,12 @@ function App() {
         )}
 
         {phase === "processing" && (
-          <ProgressView status={stream.status} message={stream.message} error={stream.error} />
+          <ProgressView
+            status={stream.status}
+            message={stream.message}
+            error={stream.error}
+            elapsedSeconds={elapsedSeconds}
+          />
         )}
 
         {phase === "done" && recipe && <RecipeCard recipe={recipe} onReset={handleReset} />}

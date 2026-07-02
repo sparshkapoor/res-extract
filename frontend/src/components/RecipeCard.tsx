@@ -47,11 +47,13 @@ function RevealedStepCard({ step }: { step: Recipe["steps"][number] }) {
 // system directly: glass panel over the photo, monospace data row, flat
 // precision list below. See DESIGN.md — glass is reserved for exactly this.
 export function RecipeCard({ recipe, onReset }: RecipeCardProps) {
-  // Last available frame, not first — usually the plated/finished shot,
-  // steadier than an early prep/motion shot. See DESIGN.md Known Gaps re: the
-  // 360x640 source-resolution ceiling this doesn't (and can't) fix, only
-  // avoids compounding.
-  const heroImage = [...recipe.steps].reverse().find((s) => s.image_path)?.image_path;
+  // Prefer the dedicated hero shot (VLM-selected finished-dish frame,
+  // independent of any step's own instructional moment) — falls back to the
+  // last step's frame for recipes extracted before hero_image_path existed.
+  // See DESIGN.md Known Gaps re: the 360x640 source-resolution ceiling this
+  // doesn't (and can't) fix, only avoids compounding.
+  const heroImage =
+    recipe.hero_image_path ?? [...recipe.steps].reverse().find((s) => s.image_path)?.image_path;
 
   const heroContainerRef = useRef<HTMLDivElement>(null);
   const heroImageRef = useRef<HTMLImageElement>(null);

@@ -30,15 +30,29 @@ Rules:
 - Output must conform exactly to the given JSON schema.
 - Group related consecutive actions into ONE step rather than one step per sentence (e.g. "add flour,\
 sugar, and salt to a bowl and whisk together" is one step, not three). Aim for roughly 5-15 steps for a \
-typical recipe — a 30+ step list almost always means you've over-segmented into individual sentences \
-instead of coherent cooking actions.
+typical SINGLE-COMPONENT recipe — a 30+ step list almost always means you've over-segmented into \
+individual sentences instead of coherent cooking actions. EXCEPTION: if the recipe genuinely has multiple \
+distinct components prepared somewhat independently (e.g. a sauce made alongside a main, a filling plus \
+a dough, a garnish with its own prep), give each component's preparation its own step(s) even if that \
+pushes the total past 15 — never merge away or silently drop a distinct sub-recipe just to stay under a \
+step-count budget. The 5-15 guidance is about not over-segmenting a single thread of actions, not a cap \
+on genuinely multi-part recipes.
 - Each step's `verbatim_transcript_citation` MUST be an exact substring copied from the transcript text \
 you were given — do not paraphrase it. This is used to map the step back to a timestamp, so it must be \
 findable verbatim in the transcript.
+- If a step involves a duration or temperature that matters for success (frying, baking, simmering, \
+resting) and it was never stated in the video, estimate a typical, reasonable value for that specific \
+food/technique from common cooking convention and state it naturally in the step's `instruction` text \
+(e.g. "Fry until golden, about 3-4 minutes at 350°F"). Don't leave an execution-critical step vague \
+just because a number wasn't spoken — apply the same judgment you already use to estimate ingredient \
+quantities (see below), just expressed in the instruction text since steps have no separate \
+estimated-quantity field.
 - Fill `cook_time_minutes`, `servings`, `calories`, and `oven_temp_f` ONLY when the transcript or on-screen \
 text states or clearly implies them (e.g. "bake for 25 minutes" -> cook_time_minutes could include that, \
 "this makes 4 servings" -> servings=4, "preheat to 350" in an oven-baking context -> oven_temp_f=350). \
-Leave any of these null rather than guessing — unlike ingredient quantities, these are not estimated.
+Leave any of these null rather than guessing — these top-level summary fields are not estimated, unlike \
+the per-step duration/temperature guidance above (which is about instruction text, not these fields) or \
+ingredient quantities.
 - Normalize fractional/obscure measurements where possible (e.g. "a pinch of salt" stays as-is if no \
 quantity was stated; "half a cup" becomes quantity="1/2", unit="cup").
 - Do not invent ingredients or steps that aren't supported by the transcript.

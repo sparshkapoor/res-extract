@@ -24,6 +24,22 @@ def test_recipe_round_trips_through_json():
     assert restored == recipe
 
 
+def test_recipe_hero_image_path_defaults_none_and_is_backward_compatible():
+    # Older cached recipe_json blobs (persisted before hero_image_path
+    # existed) have no such key at all — must still validate cleanly.
+    old_json = json.dumps(
+        {
+            "title": "Old Recipe",
+            "source_url": "https://www.youtube.com/watch?v=old123",
+            "platform": "youtube",
+            "ingredients": [],
+            "steps": [],
+        }
+    )
+    restored = Recipe.model_validate_json(old_json)
+    assert restored.hero_image_path is None
+
+
 def test_recipe_json_schema_has_required_fields_for_ollama_format():
     # This schema is passed directly to Ollama's `format=` for constrained
     # decoding — it must be a plain JSON-schema-compatible dict.

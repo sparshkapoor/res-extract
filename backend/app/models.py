@@ -20,6 +20,7 @@ class JobStatus(StrEnum):
     extracting_frames = "extracting_frames"
     frames_done = "frames_done"
     ocr = "ocr"
+    refining = "refining"
     done = "done"
     failed = "failed"
 
@@ -109,6 +110,12 @@ class Recipe(BaseModel):
     platform: Platform
     ingredients: list[Ingredient]
     steps: list[Step]
+    hero_image_path: str | None = Field(
+        default=None,
+        description="A dedicated finished-dish shot, selected independently of any "
+        "step's own image (see vlm.py task='hero') — never a step's instructional "
+        "frame. Null on older cached recipes; falls back to the last step's image.",
+    )
     cook_time_minutes: int | None = Field(
         default=None, description="Total cook time in minutes, if stated or clearly implied."
     )

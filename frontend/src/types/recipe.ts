@@ -14,6 +14,7 @@ export type JobStatus =
   | "extracting_frames"
   | "frames_done"
   | "ocr"
+  | "refining"
   | "done"
   | "failed";
 
@@ -39,6 +40,7 @@ export interface Recipe {
   platform: Platform;
   ingredients: Ingredient[];
   steps: Step[];
+  hero_image_path: string | null;
   cook_time_minutes: number | null;
   servings: number | null;
   calories: number | null;

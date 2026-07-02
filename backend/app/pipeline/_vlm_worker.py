@@ -10,8 +10,8 @@ Python process.
 
 Usage: python _vlm_worker.py <model_name>
 Reads a JSON array from stdin, one dict per request, each tagged with a
-"task" field ("quantity" | "identify" | "narrate", default "quantity" for
-backward compatibility). Prints a single JSON line to stdout — one result
+"task" field ("quantity" | "identify" | "narrate" | "hero", default "quantity"
+for backward compatibility). Prints a single JSON line to stdout — one result
 dict per request, same order/id-based shape regardless of task, so callers
 in vlm.py parse a single result format either way.
 
@@ -21,6 +21,8 @@ in vlm.py parse a single result format either way.
     -> {"id", "identified": [...], "confidence": "high"|"medium"|"low"}
   narrate:  {"id", "image_path"}
     -> {"id", "caption": "..."}
+  hero:     {"id", "image_path"}
+    -> {"id", "is_hero_shot": bool, "confidence": "high"|"medium"|"low"}
 """
 
 import json
@@ -54,6 +56,14 @@ _PROMPT_TEMPLATE_NARRATE = (
     'compact JSON object on one line: {"caption": "<one imperative sentence>"}'
 )
 
+_PROMPT_TEMPLATE_HERO = (
+    "This is a candidate thumbnail frame from a cooking video. Is this a clean, appetizing shot of the "
+    "finished, plated dish — NOT hands or utensils in motion, NOT a close-up of a raw ingredient or "
+    "empty pan, NOT a bite/reaction/mouth shot? A true hero shot shows the completed food clearly, "
+    "ideally plated or served. Respond with ONLY a compact JSON object on one line: "
+    '{"is_hero_shot": <true|false>, "confidence": "<high|medium|low>"}'
+)
+
 
 def _dedupe_unit(quantity: str | None, unit: str | None) -> tuple[str | None, str | None]:
     """The model frequently ignores the prompt's separation rule and embeds
@@ -77,6 +87,8 @@ def _build_prompt(req: dict) -> str:
         )
     if task == "narrate":
         return _PROMPT_TEMPLATE_NARRATE
+    if task == "hero":
+        return _PROMPT_TEMPLATE_HERO
     return _PROMPT_TEMPLATE_QUANTITY.format(
         step_instruction=req["step_instruction"], ingredient_name=req["ingredient_name"]
     )
@@ -102,6 +114,13 @@ def _parse_result(req: dict, raw_text: str) -> dict:
 
     if task == "narrate":
         return {"id": req["id"], "caption": (parsed.get("caption") or "").strip()}
+
+    if task == "hero":
+        return {
+            "id": req["id"],
+            "is_hero_shot": bool(parsed.get("is_hero_shot")),
+            "confidence": parsed.get("confidence") or "low",
+        }
 
     quantity = (parsed.get("quantity") or "").strip() or None
     unit = (parsed.get("unit") or "").strip() or None

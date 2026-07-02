@@ -36,11 +36,14 @@ async def build_vision_transcript(
         return TranscriptResult(segments=[], source="vision")
 
     interval = timestamps[1] - timestamps[0] if len(timestamps) > 1 else duration_seconds
-    segments: list[TranscriptSegment] = []
 
-    # Sequential, not concurrent, deliberately: the VLM subprocess shares
-    # tight Metal/Neural Engine memory headroom with Ollama's resident
-    # Qwen2.5 7B (ollama_keep_alive=-1), so this never parallelizes VLM calls.
+    # Extract every frame + run its OCR first (both cheap, no shared-memory
+    # contention), THEN make ONE batched VLM call across all of them —
+    # one model load per job, not one per frame. An earlier version called
+    # the single-frame VLM helper inside this loop, reloading the model from
+    # disk up to `vision_narration_max_frames` times per job.
+    frame_paths: list[Path] = []
+    ocr_text_by_frame: dict[Path, str] = {}
     for i, ts in enumerate(timestamps):
         frame_path = tmp_frames_dir / f"narration_{i}.jpg"
         try:
@@ -48,20 +51,25 @@ async def build_vision_transcript(
         except frames.FrameExtractionError as e:
             logger.warning("vision_narration: frame extraction failed at %.1fs: %s", ts, e)
             continue
-
         ocr_lines = await ocr.ocr_frame(frame_path)
-        ocr_text = " ".join(ocr_lines)
+        ocr_text_by_frame[frame_path] = " ".join(ocr_lines)
+        frame_paths.append(frame_path)
 
-        try:
-            caption = await vlm.caption_frame_action(frame_path)
-        except vlm.VlmError as e:
-            logger.warning("vision_narration: captioning failed at %.1fs: %s", ts, e)
-            caption = ""
+    try:
+        captions_by_frame = await vlm.caption_frames(frame_paths)
+    except vlm.VlmError as e:
+        logger.warning("vision_narration: batched captioning failed, continuing with OCR text only: %s", e)
+        captions_by_frame = {}
 
-        text = ". ".join(t for t in (caption, ocr_text) if t).strip()
+    segments: list[TranscriptSegment] = []
+    for i, ts in enumerate(timestamps):
+        frame_path = tmp_frames_dir / f"narration_{i}.jpg"
+        if frame_path not in ocr_text_by_frame:
+            continue  # extraction failed for this timestamp, skipped above
+        caption = captions_by_frame.get(frame_path, "")
+        text = ". ".join(t for t in (caption, ocr_text_by_frame[frame_path]) if t).strip()
         if not text:
             continue  # nothing usable from this frame — don't cite an empty segment
-
         segments.append(TranscriptSegment(text=text, start=ts, end=ts + interval))
 
     return TranscriptResult(segments=segments, source="vision")
