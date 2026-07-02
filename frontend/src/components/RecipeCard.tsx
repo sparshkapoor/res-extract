@@ -119,7 +119,11 @@ export function RecipeCard({ recipe, onReset }: RecipeCardProps) {
           </h2>
           <div className="overflow-hidden rounded-md bg-surface-2">
             {recipe.ingredients.map((ing, i) => (
-              <IngredientRow key={ing.name} ing={ing} showDivider={i > 0} />
+              // Index in the key, not just ing.name — the same ingredient name
+              // can legitimately appear twice in one recipe (e.g. "garlic" used
+              // separately in a filling and a sauce), which isn't unique on its
+              // own and produced real React key-collision warnings.
+              <IngredientRow key={`${ing.name}-${i}`} ing={ing} showDivider={i > 0} />
             ))}
           </div>
         </section>

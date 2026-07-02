@@ -8,9 +8,15 @@ re-run the full pipeline against a URL you've already tested.
 """
 
 import asyncio
+import logging
 import sys
 import time
 import uuid
+
+# Not imported via app.main here (this bypasses HTTP entirely), so the
+# per-stage [timing] logs in orchestrator.py need their own basicConfig call
+# to actually be visible — mirrors app/main.py's setup.
+logging.basicConfig(level=logging.INFO)
 
 from app.cache import result_cache
 from app.db import get_db, init_db
