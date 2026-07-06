@@ -11,6 +11,14 @@ interface RecipeCardProps {
   onReset: () => void;
 }
 
+// "To taste" is only ever true for seasonings (salt, pepper, a generic
+// "spices" category) — a whole ingredient like "tomatoes" missing a
+// quantity is a data gap, not something you'd season by feel, so labeling
+// it "to taste" is actively misleading. name_is_generic already flags the
+// generic-category case (backend sets it for "spices"/"seasoning"); this
+// regex catches named seasonings that aren't generic.
+const SEASONING_NAME_RE = /\b(salt|pepper|spice|spices|seasoning|herbs|garnish)\b/i;
+
 // One ingredient row, scroll-revealed independently via useScrollReveal — this
 // is why it's split out of the map() body below (hooks need a stable
 // per-element ref, not a ref array hand-rolled inline).
@@ -18,19 +26,28 @@ function IngredientRow({ ing, showDivider }: { ing: Ingredient; showDivider: boo
   const rowRef = useRef<HTMLDivElement>(null);
   useScrollReveal(rowRef);
 
+  const amount = [ing.quantity, ing.unit].filter(Boolean).join(" ");
+  const isSeasoning = ing.name_is_generic || SEASONING_NAME_RE.test(ing.name);
+  const displayAmount = amount || (isSeasoning ? "to taste" : "");
+
   return (
     <div
       ref={rowRef}
       className={`flex items-center justify-between px-4 py-3 ${showDivider ? "border-t border-hairline" : ""}`}
     >
-      <span className="text-[15px] text-text">{ing.name}</span>
-      <span
-        className="ml-3 shrink-0 text-[15px] text-text-muted"
-        title={ing.is_estimated ? "Estimated — not stated in the video" : undefined}
-      >
-        {ing.is_estimated && "~"}
-        {[ing.quantity, ing.unit].filter(Boolean).join(" ") || "to taste"}
+      <span className="text-[15px] text-text">
+        {ing.name}
+        {ing.note && <span className="ml-2 text-[13px] text-text-faint">{ing.note}</span>}
       </span>
+      {displayAmount && (
+        <span
+          className="ml-3 shrink-0 text-[15px] text-text-muted"
+          title={ing.is_estimated ? "Estimated — not stated in the video" : undefined}
+        >
+          {ing.is_estimated && "~"}
+          {displayAmount}
+        </span>
+      )}
     </div>
   );
 }

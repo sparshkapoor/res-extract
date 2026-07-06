@@ -24,6 +24,7 @@ export interface Ingredient {
   unit: string | null;
   is_estimated: boolean;
   name_is_generic: boolean;
+  note: string | null;
 }
 
 export interface Step {
