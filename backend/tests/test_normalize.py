@@ -21,6 +21,16 @@ def test_canonicalizes_full_word_unit():
     assert ing.unit == "tbsp"
 
 
+def test_splits_real_unit_word_followed_by_descriptor():
+    # Regression: observed in the Rye Pitas cached recipe — unit="cloves
+    # minced" was being wholesale relocated to note, losing the unit
+    # entirely, instead of splitting into unit="clove" + note="minced".
+    ing = normalize_ingredient(_ing(name="garlic", quantity="7", unit="cloves minced"))
+    assert ing.quantity == "7"
+    assert ing.unit == "clove"
+    assert ing.note == "minced"
+
+
 def test_unknown_single_word_unit_is_lowercased_and_kept():
     ing = normalize_ingredient(_ing(quantity="1", unit="Knob"))
     assert ing.unit == "knob"

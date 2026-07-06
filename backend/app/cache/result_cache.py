@@ -1,4 +1,3 @@
-import json
 import shutil
 from pathlib import Path
 
@@ -10,9 +9,11 @@ from app.pipeline import normalize
 # Bumped whenever a change to normalize.py (or a new Recipe/Ingredient field
 # with a required backfill) means previously-cached recipes need
 # reprocessing. 2 = normalize.py's deterministic ingredient/unit cleanup +
-# Ingredient.note field. See get_cached()'s lazy self-heal below and
-# scripts/repair_cache.py for the bulk equivalent.
-RECIPE_SCHEMA_VERSION = 2
+# Ingredient.note field. 3 = rule C' splits a real unit word followed by a
+# descriptor (e.g. "cloves minced" -> unit="clove", note="minced") instead
+# of relocating the whole string to note. See get_cached()'s lazy self-heal
+# below and scripts/repair_cache.py for the bulk equivalent.
+RECIPE_SCHEMA_VERSION = 3
 
 
 async def list_cached() -> list[dict]:

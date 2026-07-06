@@ -210,8 +210,18 @@ def normalize_ingredient(ing):
     # unit, just spelled/cased inconsistently ("TSp" -> "tsp").
     if unit:
         canonical = _lookup_unit(unit)
+        unit_words = unit.split()
+        first_word_canonical = _lookup_unit(unit_words[0]) if unit_words else None
         if canonical:
             unit = canonical
+        elif first_word_canonical and len(unit_words) > 1:
+            # Rule C': a real unit word followed by a descriptor, e.g.
+            # "cloves minced" or "cups chopped" — split rather than
+            # relocating the whole thing to `note` and losing the unit.
+            descriptor = unit[len(unit_words[0]):].strip()
+            unit = first_word_canonical
+            if descriptor:
+                note = f"{note}; {descriptor}" if note else descriptor
         # Rule C: doesn't resolve to any canonical unit at all — if it
         # reads like a note rather than a unit (a leading preposition, a
         # parenthetical remark, it's just long, or it's a bare prep
@@ -221,7 +231,7 @@ def normalize_ingredient(ing):
             _NOTE_LEADING_RE.match(unit)
             or _PARENTHETICAL_RE.match(unit)
             or len(unit) > 12
-            or unit.split()[0].lower().rstrip(".,;") in _PREP_DESCRIPTOR_WORDS
+            or unit_words[0].lower().rstrip(".,;") in _PREP_DESCRIPTOR_WORDS
         ):
             note = f"{note}; {unit}" if note else unit
             unit = None
