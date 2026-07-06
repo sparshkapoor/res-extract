@@ -1,0 +1,200 @@
+{
+  "title": "Rye Pitas with Ground Beef Filling",
+  "source_url": "https://www.instagram.com/p/DS3DPehEnpA",
+  "platform": "instagram",
+  "ingredients": [
+    {
+      "name": "ground beef",
+      "quantity": "1",
+      "unit": "lb",
+      "is_estimated": false,
+      "name_is_generic": false,
+      "note": null
+    },
+    {
+      "name": "salt",
+      "quantity": "1",
+      "unit": "tsp",
+      "is_estimated": false,
+      "name_is_generic": false,
+      "note": null
+    },
+    {
+      "name": "black pepper",
+      "quantity": "1",
+      "unit": "tsp",
+      "is_estimated": false,
+      "name_is_generic": false,
+      "note": null
+    },
+    {
+      "name": "cinnamon",
+      "quantity": "1",
+      "unit": "tsp",
+      "is_estimated": false,
+      "name_is_generic": false,
+      "note": null
+    },
+    {
+      "name": "cumin",
+      "quantity": "2",
+      "unit": "tsp",
+      "is_estimated": false,
+      "name_is_generic": false,
+      "note": null
+    },
+    {
+      "name": "paprika",
+      "quantity": "2",
+      "unit": "tsp",
+      "is_estimated": false,
+      "name_is_generic": false,
+      "note": null
+    },
+    {
+      "name": "allspice",
+      "quantity": "1",
+      "unit": "tsp",
+      "is_estimated": false,
+      "name_is_generic": false,
+      "note": null
+    },
+    {
+      "name": "yellow onion",
+      "quantity": "1",
+      "unit": "yellow onion",
+      "is_estimated": false,
+      "name_is_generic": false,
+      "note": "grated & squeezed dry"
+    },
+    {
+      "name": "garlic",
+      "quantity": "7",
+      "unit": "cloves",
+      "is_estimated": false,
+      "name_is_generic": false,
+      "note": "minced"
+    },
+    {
+      "name": "tomato paste",
+      "quantity": "2",
+      "unit": "tbsp",
+      "is_estimated": false,
+      "name_is_generic": false,
+      "note": null
+    },
+    {
+      "name": "parsley",
+      "quantity": "1/3",
+      "unit": "cup",
+      "is_estimated": false,
+      "name_is_generic": false,
+      "note": "chopped"
+    },
+    {
+      "name": "cilantro",
+      "quantity": "1/3",
+      "unit": "cup",
+      "is_estimated": false,
+      "name_is_generic": false,
+      "note": "chopped (optional but excellent)"
+    },
+    {
+      "name": "olive oil",
+      "quantity": "1",
+      "unit": "tbsp",
+      "is_estimated": false,
+      "name_is_generic": false,
+      "note": null
+    },
+    {
+      "name": "pitas",
+      "quantity": null,
+      "unit": null,
+      "is_estimated": true,
+      "name_is_generic": false,
+      "note": null
+    },
+    {
+      "name": "Greek yogurt",
+      "quantity": "1/2",
+      "unit": "cup",
+      "is_estimated": false,
+      "name_is_generic": false,
+      "note": null
+    },
+    {
+      "name": "tahini",
+      "quantity": "3",
+      "unit": "tbsp",
+      "is_estimated": false,
+      "name_is_generic": false,
+      "note": null
+    },
+    {
+      "name": "lemon juice",
+      "quantity": "1/2",
+      "unit": "lemon",
+      "is_estimated": false,
+      "name_is_generic": false,
+      "note": "juiced"
+    },
+    {
+      "name": "garlic",
+      "quantity": "2",
+      "unit": "cloves",
+      "is_estimated": false,
+      "name_is_generic": false,
+      "note": "minced"
+    }
+  ],
+  "steps": [
+    {
+      "index": 1,
+      "instruction": "Combine ground beef with spices, tomato paste, garlic, onion, and parsley.",
+      "verbatim_transcript_citation": "Just combine ground beef with these spices, tomato paste, garlic, onion, and parsley.",
+      "timestamp_seconds": null,
+      "image_path": null
+    },
+    {
+      "index": 2,
+      "instruction": "Place pitas into pockets and stuff them with the meat mixture.",
+      "verbatim_transcript_citation": "Have the pitas into pockets, stuff with the meat",
+      "timestamp_seconds": null,
+      "image_path": null
+    },
+    {
+      "index": 3,
+      "instruction": "Brush pitas with olive oil before cooking.",
+      "verbatim_transcript_citation": "brush with olive oil before cooking.",
+      "timestamp_seconds": null,
+      "image_path": null
+    },
+    {
+      "index": 4,
+      "instruction": "Pan-fry the pitas until golden, about 2-3 minutes at medium heat.",
+      "verbatim_transcript_citation": "pan fry the pitas until golden before tossing into the oven.",
+      "timestamp_seconds": null,
+      "image_path": null
+    },
+    {
+      "index": 5,
+      "instruction": "While the pitas are baking, mix together yogurt, lemon juice, garlic, tahini, spices, fresh herbs, and olive oil.",
+      "verbatim_transcript_citation": "While they bake, you're gonna mix together yogurt, lemon juice, garlic, tahini, spices, fresh herbs, and olive oil.",
+      "timestamp_seconds": null,
+      "image_path": null
+    },
+    {
+      "index": 6,
+      "instruction": "Take a big bite, hope they're cooked through, and enjoy!",
+      "verbatim_transcript_citation": "Take a big bite, hope they're cooked through, and enjoy!",
+      "timestamp_seconds": null,
+      "image_path": null
+    }
+  ],
+  "hero_image_path": null,
+  "cook_time_minutes": null,
+  "servings": null,
+  "calories": null,
+  "oven_temp_f": null
+}
