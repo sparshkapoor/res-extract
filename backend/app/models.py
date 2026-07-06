@@ -65,6 +65,12 @@ class Ingredient(BaseModel):
         description="True when `name` is a generic category (e.g. 'spices', 'seasoning') "
         "because the transcript/on-screen text never named it specifically.",
     )
+    note: str | None = Field(
+        default=None,
+        description="Free-text aside that isn't a quantity or unit (e.g. 'optional', "
+        "'for the pan', a unit conversion) — relocated here by normalize.py rather "
+        "than left polluting `unit`. Null on older cached recipes.",
+    )
 
     @model_validator(mode="after")
     def _dedupe_unit_from_quantity(self) -> "Ingredient":
