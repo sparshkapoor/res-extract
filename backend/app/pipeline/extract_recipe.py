@@ -1,11 +1,14 @@
 import asyncio
 import json
+from typing import Callable
 
 import ollama
 from pydantic import BaseModel
 
 from app.config import get_settings
 from app.models import Ingredient, Platform, Recipe, Step
+from app.pipeline.normalize import CANONICAL_UNIT_TOKENS
+from app.pipeline.transcript import estimate_tokens
 
 
 class _IngredientsOnly(BaseModel):
@@ -21,7 +24,11 @@ class _InstructionsOnly(BaseModel):
     steps: list[_StepInstruction]
 
 
-_SYSTEM_PROMPT = """You are a culinary transcript parser. You extract structured recipes from noisy, \
+# Reused verbatim from normalize.py so the prompt can never list a unit the
+# normalizer doesn't also recognize (and vice versa).
+_UNIT_GLOSSARY = ", ".join(CANONICAL_UNIT_TOKENS)
+
+_SYSTEM_PASS1 = f"""You are a culinary transcript parser. You extract structured recipes from noisy, \
 colloquial cooking-video transcripts. Represent the recipe as an imperative "program": a title, a list \
 of ingredients with normalized quantities/units, and an ordered list of steps where each step is a \
 single imperative action (e.g. "Melt butter in a pan over medium heat.").
@@ -37,6 +44,11 @@ a dough, a garnish with its own prep), give each component's preparation its own
 pushes the total past 15 — never merge away or silently drop a distinct sub-recipe just to stay under a \
 step-count budget. The 5-15 guidance is about not over-segmenting a single thread of actions, not a cap \
 on genuinely multi-part recipes.
+- One coherent action per step — never collapse the whole recipe into a single step like "mix all the \
+ingredients". Name the specific ingredients being combined or acted on in each step. Include technique \
+and doneness cues (temperature, time, visual/textural sign of doneness) when the narration or on-screen \
+text states them. A short video is not an excuse for a terse recipe — it still gets one step per distinct \
+action, just as a longer video would.
 - Each step's `verbatim_transcript_citation` MUST be an exact substring copied from the transcript text \
 you were given — do not paraphrase it. This is used to map the step back to a timestamp, so it must be \
 findable verbatim in the transcript.
@@ -55,6 +67,10 @@ the per-step duration/temperature guidance above (which is about instruction tex
 ingredient quantities.
 - Normalize fractional/obscure measurements where possible (e.g. "a pinch of salt" stays as-is if no \
 quantity was stated; "half a cup" becomes quantity="1/2", unit="cup").
+- `unit` must be one of these canonical tokens, or null: {_UNIT_GLOSSARY}. Never put a free-text note \
+(e.g. "for heating the pan", "(optional)"), a preposition phrase, or a number in `unit` — put a number \
+that belongs with the unit into `quantity` instead, and anything else into a separate note if the schema \
+has one; otherwise just omit it.
 - Do not invent ingredients or steps that aren't supported by the transcript.
 - If an ingredient's quantity/unit is never stated (spoken or on-screen), estimate a reasonable typical \
 amount for that ingredient in a dish like this, based on common recipe conventions (e.g. an unspecified \
@@ -69,6 +85,79 @@ name="spices" — and set `name_is_generic=true`. NEVER fabricate a parenthetica
 correct way to represent this. Set `name_is_generic=false` for every specifically-named ingredient.
 """
 
+# Refine passes (OCR-text and description-text ingredient refinement) never
+# touch steps and never need the full extraction ruleset above — sending the
+# ~50-line pass-1 prompt on every one of these smaller calls was pure waste.
+_SYSTEM_INGREDIENT_REFINE = f"""You are revising a recipe's ingredient list using one additional source \
+of text. Output must conform exactly to the given JSON schema. `unit` must be one of these canonical \
+tokens, or null: {_UNIT_GLOSSARY} — never a free-text note, a preposition phrase, or a number. Follow the \
+specific revision instructions in the user message exactly, and change nothing they don't ask you to \
+change."""
+
+_SYSTEM_PROOFREAD = """You are proofreading recipe step instructions against the transcript citation each \
+was derived from. Output must conform exactly to the given JSON schema. Fix only instructions that are \
+garbled, truncated, non-English gibberish, or don't logically match their citation; leave every other \
+instruction completely unchanged. Never add, remove, or reorder steps, and keep every `index` exactly as \
+given."""
+
+
+# One few-shot example, as a user/assistant message pair ahead of the real
+# pass-1 prompt. A short, sparsely-narrated recipe on purpose — this is
+# exactly the failure class users reported (short videos collapsing into one
+# terse step) — demonstrating correct decomposition into distinct steps,
+# verbatim citations, canonical units, and both is_estimated states. Exactly
+# one example: small instruction-tuned models degrade with long multi-shot
+# prompts, and one clear example is enough to anchor the output shape.
+_FEW_SHOT_TRANSCRIPT = (
+    "Okay so today I'm making a quick garlic butter sauce. First melt a stick of butter in a pan over "
+    "medium heat. Once it's melted, add in like four cloves of minced garlic and cook until fragrant, "
+    "maybe thirty seconds. Then squeeze in the juice of one lemon and a splash of white wine, let it "
+    "simmer for two minutes. Take it off the heat and stir in some chopped parsley and a pinch of salt. "
+    "That's it, drizzle it over your fish or pasta."
+)
+
+_FEW_SHOT_RECIPE = {
+    "title": "Quick Garlic Butter Sauce",
+    "source_url": "https://example.com/demo-video",
+    "platform": "youtube",
+    "ingredients": [
+        {"name": "butter", "quantity": "1", "unit": "stick", "is_estimated": False,
+         "name_is_generic": False, "note": None},
+        {"name": "garlic", "quantity": "4", "unit": "clove", "is_estimated": False,
+         "name_is_generic": False, "note": None},
+        {"name": "lemon juice", "quantity": "1", "unit": None, "is_estimated": False,
+         "name_is_generic": False, "note": "juice of one lemon"},
+        {"name": "white wine", "quantity": "2", "unit": "tbsp", "is_estimated": True,
+         "name_is_generic": False, "note": None},
+        {"name": "parsley", "quantity": "1", "unit": "tbsp", "is_estimated": True,
+         "name_is_generic": False, "note": "chopped"},
+        {"name": "salt", "quantity": None, "unit": "pinch", "is_estimated": False,
+         "name_is_generic": False, "note": None},
+    ],
+    "steps": [
+        {"index": 0, "instruction": "Melt butter in a pan over medium heat.",
+         "verbatim_transcript_citation": "melt a stick of butter in a pan over medium heat",
+         "timestamp_seconds": None, "image_path": None},
+        {"index": 1, "instruction": "Add minced garlic and cook until fragrant, about 30 seconds.",
+         "verbatim_transcript_citation": "add in like four cloves of minced garlic and cook until "
+         "fragrant, maybe thirty seconds", "timestamp_seconds": None, "image_path": None},
+        {"index": 2, "instruction": "Squeeze in lemon juice and white wine, and simmer for 2 minutes.",
+         "verbatim_transcript_citation": "squeeze in the juice of one lemon and a splash of white wine, "
+         "let it simmer for two minutes", "timestamp_seconds": None, "image_path": None},
+        {"index": 3, "instruction": "Remove from heat and stir in chopped parsley and a pinch of salt.",
+         "verbatim_transcript_citation": "take it off the heat and stir in some chopped parsley and a "
+         "pinch of salt", "timestamp_seconds": None, "image_path": None},
+        {"index": 4, "instruction": "Drizzle the sauce over fish or pasta to serve.",
+         "verbatim_transcript_citation": "drizzle it over your fish or pasta",
+         "timestamp_seconds": None, "image_path": None},
+    ],
+    "hero_image_path": None,
+    "cook_time_minutes": 5,
+    "servings": None,
+    "calories": None,
+    "oven_temp_f": None,
+}
+
 
 def _build_pass1_prompt(transcript_text: str, source_url: str, platform: Platform) -> str:
     return (
@@ -77,6 +166,24 @@ def _build_pass1_prompt(transcript_text: str, source_url: str, platform: Platfor
         f"Transcript:\n{transcript_text}\n\n"
         "Extract the recipe as a JSON object matching the schema."
     )
+
+
+_FEW_SHOT_MESSAGES = [
+    {
+        "role": "user",
+        "content": _build_pass1_prompt(_FEW_SHOT_TRANSCRIPT, "https://example.com/demo-video", Platform.youtube),
+    },
+    {"role": "assistant", "content": json.dumps(_FEW_SHOT_RECIPE)},
+]
+
+# Every pass-1 call pays this fixed cost (system prompt + few-shot example)
+# before a single token of the real transcript is counted. Exposed so
+# orchestrator.py can compute how much of num_ctx is actually left for the
+# transcript itself when deciding whether to truncate (see
+# transcript.budget_segments).
+PASS1_PROMPT_OVERHEAD_TOKENS = estimate_tokens(
+    _SYSTEM_PASS1 + "".join(m["content"] for m in _FEW_SHOT_MESSAGES)
+)
 
 
 def _build_pass2_prompt(ingredients_json: str, ocr_text: str) -> str:
@@ -152,26 +259,50 @@ def _client() -> ollama.Client:
     return ollama.Client(host=settings.ollama_host)
 
 
-def _chat_sync(prompt: str, schema: type[BaseModel]) -> dict:
+def _chat_sync(prompt: str, schema: type[BaseModel], system: str, few_shot: list[dict] | None = None) -> dict:
     settings = get_settings()
     client = _client()
+    messages = [{"role": "system", "content": system}]
+    if few_shot:
+        messages.extend(few_shot)
+    messages.append({"role": "user", "content": prompt})
     response = client.chat(
         model=settings.ollama_model,
-        messages=[
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
+        messages=messages,
         format=schema.model_json_schema(),
         keep_alive=settings.ollama_keep_alive,
-        options={"temperature": 0.1, "num_ctx": settings.ollama_num_ctx},
+        options={"temperature": settings.llm_temperature, "num_ctx": settings.ollama_num_ctx},
     )
     return json.loads(response["message"]["content"])
 
 
+async def _chat(prompt: str, schema: type[BaseModel], system: str, few_shot: list[dict] | None = None) -> BaseModel:
+    raw = await asyncio.to_thread(_chat_sync, prompt, schema, system, few_shot)
+    return schema.model_validate(raw)
+
+
+async def _chat_with_retry(
+    prompt: str,
+    schema: type[BaseModel],
+    system: str,
+    is_valid: Callable[[BaseModel], bool],
+    corrective_note: str,
+) -> tuple[BaseModel, bool]:
+    """One bounded retry when the model doesn't follow the alignment
+    contract (wrong count, wrong index set) refine/proofread calls depend
+    on. Most mismatches are one-off sampling noise, not the model refusing
+    the instruction, so a single corrective nudge recovers a useful result
+    far more often than immediately discarding the whole call."""
+    parsed = await _chat(prompt, schema, system, few_shot=None)
+    if is_valid(parsed):
+        return parsed, True
+    retried = await _chat(f"{prompt}\n\n{corrective_note}", schema, system, few_shot=None)
+    return retried, is_valid(retried)
+
+
 async def call_llm(transcript_text: str, source_url: str, platform: Platform) -> Recipe:
     prompt = _build_pass1_prompt(transcript_text, source_url, platform)
-    raw = await asyncio.to_thread(_chat_sync, prompt, Recipe)
-    recipe = Recipe.model_validate(raw)
+    recipe = await _chat(prompt, Recipe, _SYSTEM_PASS1, few_shot=_FEW_SHOT_MESSAGES)
     recipe.source_url = source_url
     recipe.platform = platform
     return recipe
@@ -190,12 +321,23 @@ async def proofread_steps(steps: list[Step]) -> list[Step]:
         for s in steps
     ]
     prompt = _build_proofread_prompt(json.dumps(context))
-    raw = await asyncio.to_thread(_chat_sync, prompt, _InstructionsOnly)
-    proofed = _InstructionsOnly.model_validate(raw)
+    expected_indexes = {s.index for s in steps}
 
-    if len(proofed.steps) != len(steps) or {s.index for s in proofed.steps} != {s.index for s in steps}:
+    def is_valid(parsed: _InstructionsOnly) -> bool:
+        return len(parsed.steps) == len(steps) and {s.index for s in parsed.steps} == expected_indexes
+
+    proofed, ok = await _chat_with_retry(
+        prompt,
+        _InstructionsOnly,
+        _SYSTEM_PROOFREAD,
+        is_valid,
+        f"Your previous response did not return exactly one instruction for each of these step indexes, "
+        f"unchanged: {sorted(expected_indexes)}. Return exactly that set of indexes, no more, no fewer.",
+    )
+    if not ok:
         # Same alignment safety as refine_ingredients_with_ocr — if the
-        # index set doesn't match exactly, don't risk misapplying corrections.
+        # index set still doesn't match exactly after the retry, don't risk
+        # misapplying corrections.
         return steps
 
     fixed_by_index = {s.index: s.instruction for s in proofed.steps}
@@ -207,13 +349,24 @@ async def proofread_steps(steps: list[Step]) -> list[Step]:
 async def refine_ingredients_with_ocr(ingredients: list[Ingredient], ocr_text: str) -> list[Ingredient]:
     ingredients_json = _IngredientsOnly(ingredients=ingredients).model_dump_json()
     prompt = _build_pass2_prompt(ingredients_json, ocr_text)
-    raw = await asyncio.to_thread(_chat_sync, prompt, _IngredientsOnly)
-    refined = _IngredientsOnly.model_validate(raw)
+    want = len(ingredients)
 
-    if len(refined.ingredients) != len(ingredients):
+    def is_valid(parsed: _IngredientsOnly) -> bool:
+        return len(parsed.ingredients) == want
+
+    refined, ok = await _chat_with_retry(
+        prompt,
+        _IngredientsOnly,
+        _SYSTEM_INGREDIENT_REFINE,
+        is_valid,
+        f"Your previous response changed the ingredient count. Return exactly {want} ingredients — the "
+        "same ones, in the same order — revising only their quantity/unit/is_estimated fields.",
+    )
+    if not ok:
         # The model didn't follow the "don't add/remove ingredients"
-        # instruction — can't trust the alignment, so keep the originals
-        # rather than risk silently dropping or duplicating an ingredient.
+        # instruction even after a corrective retry — can't trust the
+        # alignment, so keep the originals rather than risk silently
+        # dropping or duplicating an ingredient.
         return ingredients
     return refined.ingredients
 
@@ -230,8 +383,7 @@ async def refine_ingredients_with_description(
     invent items absent from both sources, never drop unmentioned ones)."""
     ingredients_json = _IngredientsOnly(ingredients=ingredients).model_dump_json()
     prompt = _build_description_prompt(ingredients_json, description_text)
-    raw = await asyncio.to_thread(_chat_sync, prompt, _IngredientsOnly)
-    refined = _IngredientsOnly.model_validate(raw)
+    refined = await _chat(prompt, _IngredientsOnly, _SYSTEM_INGREDIENT_REFINE)
 
     if not refined.ingredients:
         # The model returned nothing usable — keep the originals rather than

@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     # video's transcript, so it's the practical ceiling here, not the
     # architectural one.
     ollama_num_ctx: int = 32768
+    # Low but non-zero: this is JSON-constrained structured extraction, not
+    # creative writing — we want the model's best single guess, not sampling
+    # diversity, but 0.0 can make some Ollama/llama.cpp builds behave oddly
+    # with repeated schema fields. Was hardcoded in extract_recipe.py; moved
+    # here so it can be tuned without a code change.
+    llm_temperature: float = 0.1
 
     # ASR (mlx-whisper, bare-metal, Metal-backed)
     # "small" chosen over "large-v3" deliberately: the 16GB M1 Air deployment
