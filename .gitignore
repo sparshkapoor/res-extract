@@ -160,3 +160,6 @@ skills-lock.json
 frontend/vercel/
 frontend/figma/
 frontend/theverge/
+
+# Eval harness run output (regenerated per run, not source data)
+backend/evals/reports/

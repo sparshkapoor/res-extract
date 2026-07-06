@@ -1,0 +1,207 @@
+{
+  "id": "rye-pitas",
+  "url": "https://www.instagram.com/p/DS3DPehEnpA",
+  "platform": "instagram",
+  "transcript": {
+    "segments": [
+      {
+        "text": "DINNER'S YOU'LL ACTUALLY MAKE, EPISODE 19.",
+        "start": 0.0,
+        "end": 2.48
+      },
+      {
+        "text": "A rye that is surprisingly so easy, you're gonna wanna make these everyday.",
+        "start": 2.48,
+        "end": 6.2
+      },
+      {
+        "text": "Just combine ground beef with these spices, tomato paste, garlic, onion, and parsley.",
+        "start": 6.2,
+        "end": 10.72
+      },
+      {
+        "text": "Have the pitas into pockets, stuff with the meat, and brush with olive oil before cooking.",
+        "start": 10.72,
+        "end": 14.64
+      },
+      {
+        "text": "If you wanna save recipes just like this one, add them into the Osta app I created, so you",
+        "start": 14.64,
+        "end": 18.740000000000002
+      },
+      {
+        "text": "can have all your favorite recipes in one place, and you can even save unlimited recipes",
+        "start": 18.740000000000002,
+        "end": 22.76
+      },
+      {
+        "text": "for free, unlike the other apps that'll charge you.",
+        "start": 22.76,
+        "end": 25.16
+      },
+      {
+        "text": "Now pan fry the pitas until golden before tossing into the oven.",
+        "start": 25.16,
+        "end": 28.52
+      },
+      {
+        "text": "While they bake, you're gonna mix together yogurt, lemon juice, garlic, tahini, spices,",
+        "start": 28.52,
+        "end": 32.4
+      },
+      {
+        "text": "fresh herbs, and olive oil.",
+        "start": 32.4,
+        "end": 33.76
+      },
+      {
+        "text": "Take a big bite, hope they're cooked through, and enjoy!",
+        "start": 33.76,
+        "end": 36.16
+      }
+    ],
+    "source": "asr"
+  },
+  "description": "Top 3 Recipes of 2025: Arayes🔥\n\nSince all of you are asking - the app link for Osta is in my bio or you can search “Osta Recipes” on the App Store or Google Play store ‼️🫶\n\nCrispy, Juicy Middle Eastern Meat-Stuffed Pitas with a Garlic Tahini Sauce 🥙\n\nComment “Recipe” and I’ll send you the full recipe card for free!!\n\nIngredients:\n-4 small pitas, cut in half\n-1 yellow onion, grated & squeezed dry\n-7 garlic cloves, minced\n-2 tbsp tomato paste\n-1/3 cup fresh parsley, chopped\n-1/3 cup fresh cilantro, chopped (optional but excellent)\n-1 tbsp olive oil\n-1 lb (0.45 kg) lean ground beef\n-Spices: 1 tsp salt, 1 tsp black pepper, 1 tsp cinnamon, 2 tsp cumin, 2 tsp paprika, 1 tsp allspice\n\nFor the Garlic Tahini Sauce:\n-1/2 cup Greek yogurt\n-3 tbsp tahini\n-1/2 lemon, juiced\n-2 garlic cloves, minced\n-2 tbsp olive oil\n-1/4 cup fresh parsley, chopped\n-1/4 cup fresh cilantro, chopped\n-1 tsp each: cumin, salt, pepper, paprika\n\nInstructions:\n1. Preheat your oven to 350°F (175°C). Grate your onion and squeeze every last drop of liquid out using paper towel or cheesecloth. \n2. In a large bowl, combine the ground beef, tomato paste, minced garlic, all the spices, parsley, cilantro (if using), and that very dry grated onion. Mix with your hands for about 2 minutes.\n3. Cut each pita in half. If they don’t already have a pocket, carefully use a knife to make one. Now, pack them with your beef mixture — and I mean stuff them. You want them full but not bursting (ripped pita = heartbreak).\n4. Crisp ’Em Up: Brush the outsides of the stuffed pitas lightly with olive oil. Heat a lightly oiled skillet over medium heat. Place each arayes meat-side down and sear for 1–2 minutes until you get that gorgeous crust. Then sear the pita sides until golden and crisp. \n5. Transfer the seared arayes to a baking sheet and finish them in the oven for 10–15 minutes, until fully cooked through. \n6. While they bake, whisk together all the garlic tahini sauce ingredients in a bowl. Taste and adjust lemon, salt, or garlic levels to your liking.\n7. When the arayes are hot out of the oven, optionally brush them with melted garlic herb butter. Enjoy! 🫡",
+  "ocr_text": "",
+  "duration_seconds": 36.22100067138672,
+  "expected": {
+    "title_contains": [
+      "Pita"
+    ],
+    "ingredients": [
+      {
+        "name": "pitas",
+        "quantity": "4",
+        "unit": null
+      },
+      {
+        "name": "yellow onion",
+        "quantity": "1",
+        "unit": null
+      },
+      {
+        "name": "garlic",
+        "quantity": "7",
+        "unit": "clove"
+      },
+      {
+        "name": "tomato paste",
+        "quantity": "2",
+        "unit": "tbsp"
+      },
+      {
+        "name": "parsley",
+        "quantity": "1/3",
+        "unit": "cup"
+      },
+      {
+        "name": "cilantro",
+        "quantity": "1/3",
+        "unit": "cup"
+      },
+      {
+        "name": "olive oil",
+        "quantity": "1",
+        "unit": "tbsp"
+      },
+      {
+        "name": "ground beef",
+        "quantity": "1",
+        "unit": "lb"
+      },
+      {
+        "name": "salt",
+        "quantity": "1",
+        "unit": "tsp"
+      },
+      {
+        "name": "black pepper",
+        "quantity": "1",
+        "unit": "tsp"
+      },
+      {
+        "name": "cinnamon",
+        "quantity": "1",
+        "unit": "tsp"
+      },
+      {
+        "name": "cumin",
+        "quantity": "2",
+        "unit": "tsp"
+      },
+      {
+        "name": "paprika",
+        "quantity": "2",
+        "unit": "tsp"
+      },
+      {
+        "name": "allspice",
+        "quantity": "1",
+        "unit": "tsp"
+      },
+      {
+        "name": "greek yogurt",
+        "quantity": "1/2",
+        "unit": "cup"
+      },
+      {
+        "name": "tahini",
+        "quantity": "3",
+        "unit": "tbsp"
+      },
+      {
+        "name": "lemon juice",
+        "quantity": "1/2",
+        "unit": null
+      },
+      {
+        "name": "garlic",
+        "quantity": "2",
+        "unit": "clove"
+      },
+      {
+        "name": "olive oil",
+        "quantity": "2",
+        "unit": "tbsp"
+      },
+      {
+        "name": "parsley",
+        "quantity": "1/4",
+        "unit": "cup"
+      },
+      {
+        "name": "cilantro",
+        "quantity": "1/4",
+        "unit": "cup"
+      },
+      {
+        "name": "cumin",
+        "quantity": "1",
+        "unit": "tsp"
+      },
+      {
+        "name": "salt",
+        "quantity": "1",
+        "unit": "tsp"
+      },
+      {
+        "name": "pepper",
+        "quantity": "1",
+        "unit": "tsp"
+      },
+      {
+        "name": "paprika",
+        "quantity": "1",
+        "unit": "tsp"
+      }
+    ],
+    "steps_count_range": [
+      5,
+      9
+    ],
+    "must_cite": true,
+    "min_transcript_coverage": null,
+    "max_terse_steps": null
+  }
+}
