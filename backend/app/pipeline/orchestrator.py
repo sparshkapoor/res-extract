@@ -14,6 +14,7 @@ from app.pipeline import (
     download,
     extract_recipe,
     frames,
+    normalize,
     ocr,
     spellcheck,
     transcript,
@@ -251,6 +252,14 @@ async def run_pipeline(job_id: str, raw_url: str) -> None:
 
         if recipe.hero_image_path:
             recipe.hero_image_path = f"/media/jobs/{job_id}/{recipe.hero_image_path}"
+
+        # --- 10.5. Deterministic ingredient/unit cleanup ----------------------------
+        # Runs last, after every LLM/VLM pass has had a chance to fill in
+        # quantity/unit/name — a single authoritative pass rather than
+        # duplicated ad hoc cleanup in each pass. See normalize.py; also
+        # reused verbatim by scripts/repair_cache.py and evals/metrics.py.
+        async with _timed_stage("normalize"):
+            recipe = normalize.normalize_recipe(recipe)
 
         # --- 11. Cache write -------------------------------------------------------
         url_hash = sha256_of_url(url)
