@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS result_cache (
     url             TEXT NOT NULL,
     recipe_json     TEXT NOT NULL,
     media_dir       TEXT NOT NULL,
+    schema_version  INTEGER NOT NULL DEFAULT 1,
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -44,6 +45,16 @@ async def init_db() -> None:
     settings = get_settings()
     async with aiosqlite.connect(settings.db_path) as db:
         await db.executescript(SCHEMA)
+        # `CREATE TABLE IF NOT EXISTS` above is a no-op against a
+        # result_cache table that already existed before schema_version was
+        # added, so patch it in here. Idempotent — a no-op once the column
+        # is present.
+        cursor = await db.execute("PRAGMA table_info(result_cache)")
+        columns = {row[1] for row in await cursor.fetchall()}
+        if "schema_version" not in columns:
+            await db.execute(
+                "ALTER TABLE result_cache ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 1"
+            )
         await db.commit()
 
 

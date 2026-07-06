@@ -5,6 +5,14 @@ from pathlib import Path
 from app.config import get_settings
 from app.db import get_db
 from app.models import Recipe
+from app.pipeline import normalize
+
+# Bumped whenever a change to normalize.py (or a new Recipe/Ingredient field
+# with a required backfill) means previously-cached recipes need
+# reprocessing. 2 = normalize.py's deterministic ingredient/unit cleanup +
+# Ingredient.note field. See get_cached()'s lazy self-heal below and
+# scripts/repair_cache.py for the bulk equivalent.
+RECIPE_SCHEMA_VERSION = 2
 
 
 async def list_cached() -> list[dict]:
@@ -44,12 +52,27 @@ async def list_cached() -> list[dict]:
 async def get_cached(url_hash: str) -> Recipe | None:
     async with get_db() as db:
         cursor = await db.execute(
-            "SELECT recipe_json FROM result_cache WHERE url_hash = ?", (url_hash,)
+            "SELECT recipe_json, schema_version FROM result_cache WHERE url_hash = ?", (url_hash,)
         )
         row = await cursor.fetchone()
         if row is None:
             return None
-        return Recipe.model_validate_json(row["recipe_json"])
+        recipe = Recipe.model_validate_json(row["recipe_json"])
+
+        if row["schema_version"] < RECIPE_SCHEMA_VERSION:
+            # Lazy self-heal: a recipe cached under an older normalize.py
+            # (or before a field like Ingredient.note existed) gets upgraded
+            # in place on next read, so a cache hit is never stale even if
+            # scripts/repair_cache.py was never run for this row. Cheap and
+            # deterministic — no models involved.
+            recipe = normalize.normalize_recipe(recipe)
+            await db.execute(
+                "UPDATE result_cache SET recipe_json = ?, schema_version = ? WHERE url_hash = ?",
+                (recipe.model_dump_json(), RECIPE_SCHEMA_VERSION, url_hash),
+            )
+            await db.commit()
+
+        return recipe
 
 
 async def write_cache(url_hash: str, url: str, recipe: Recipe, job_frames_dir: Path) -> Path:
@@ -74,8 +97,15 @@ async def write_cache(url_hash: str, url: str, recipe: Recipe, job_frames_dir: P
 
     async with get_db() as db:
         await db.execute(
-            "INSERT OR REPLACE INTO result_cache (url_hash, url, recipe_json, media_dir) VALUES (?, ?, ?, ?)",
-            (url_hash, url, cached_recipe.model_dump_json(), str(media_dir.relative_to(settings.storage_dir))),
+            "INSERT OR REPLACE INTO result_cache (url_hash, url, recipe_json, media_dir, schema_version) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                url_hash,
+                url,
+                cached_recipe.model_dump_json(),
+                str(media_dir.relative_to(settings.storage_dir)),
+                RECIPE_SCHEMA_VERSION,
+            ),
         )
         await db.commit()
 
