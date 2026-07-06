@@ -25,8 +25,8 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from app.models import Recipe
-from app.pipeline import citation_map, extract_recipe
+from app.models import Recipe, TranscriptResult
+from app.pipeline import citation_map, extract_recipe, transcript
 from app.pipeline.normalize import normalize_recipe
 
 from evals import metrics
@@ -43,6 +43,17 @@ def load_golden_cases(case_filter: str | None) -> list[GoldenCase]:
     cases = [GoldenCase.model_validate_json(p.read_text()) for p in paths]
     if case_filter:
         cases = [c for c in cases if c.id == case_filter]
+    for case in cases:
+        # Same compaction the real orchestrator applies before pass 1 — must
+        # match here too, since _run_llm_chain and _finish (citation_map)
+        # both key off case.transcript and would otherwise diverge from what
+        # a live run actually sees. Token budgeting is deliberately skipped:
+        # it's a rare-case safety valve for pathologically long transcripts,
+        # and golden cases are frozen short fixtures that will never hit it.
+        case.transcript = TranscriptResult(
+            segments=transcript.compact_segments(case.transcript.segments),
+            source=case.transcript.source,
+        )
     return cases
 
 

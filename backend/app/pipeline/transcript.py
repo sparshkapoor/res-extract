@@ -81,3 +81,70 @@ def merge(real: TranscriptResult, vision: TranscriptResult) -> TranscriptResult:
     job's stage message and cached result stay honest about provenance."""
     segments = sorted([*real.segments, *vision.segments], key=lambda s: s.start)
     return TranscriptResult(segments=segments, source="blended")
+
+
+# --- Compaction & token budgeting (WS4) -----------------------------------
+# Segment-level, not string-level: citation_map.py needs the exact same
+# segments the LLM saw, or a verbatim citation the model copied could stop
+# resolving to a timestamp. Both compact_segments() and budget_segments()
+# only ever drop/merge whole segments, never rewrite text inside one that
+# survives, so a citation the LLM produces from surviving text stays a valid
+# substring.
+
+_FILLER_PATTERN = re.compile(r"^[\[\(].*[\]\)]$|^[♪\s]+$")
+_MICRO_SEGMENT_MAX_WORDS = 3
+
+
+def compact_segments(segments: list[TranscriptSegment]) -> list[TranscriptSegment]:
+    """Drops filler/no-op segments and merges runs of consecutive
+    micro-segments (Whisper's tendency to split a short phrase into several
+    tiny segments) into one, preserving the run's start/end timestamps.
+    Idempotent: re-running on an already-compacted list is a no-op."""
+    deduped: list[TranscriptSegment] = []
+    for seg in segments:
+        text = seg.text.strip()
+        if not text or _FILLER_PATTERN.match(text):
+            continue
+        # Drop exact consecutive duplicates (Whisper repetition-looping on
+        # near-silent/noisy audio produces runs of the identical segment).
+        if deduped and deduped[-1].text.strip().lower() == text.lower():
+            continue
+        deduped.append(seg)
+
+    merged: list[TranscriptSegment] = []
+    for seg in deduped:
+        text = seg.text.strip()
+        is_micro = len(text.split()) < _MICRO_SEGMENT_MAX_WORDS
+        if is_micro and merged:
+            prev = merged[-1]
+            merged[-1] = TranscriptSegment(
+                text=f"{prev.text.strip()} {text}".strip(), start=prev.start, end=seg.end
+            )
+        else:
+            merged.append(TranscriptSegment(text=text, start=seg.start, end=seg.end))
+    return merged
+
+
+def estimate_tokens(text: str) -> int:
+    """Cheap chars/3.5 heuristic — good enough to catch pathological cases
+    (multi-hour transcripts) before Ollama silently truncates past
+    num_ctx; not meant to match a real tokenizer exactly."""
+    return int(len(text) / 3.5)
+
+
+def budget_segments(segments: list[TranscriptSegment], max_tokens: int) -> tuple[list[TranscriptSegment], bool]:
+    """Drops whole segments from the tail until the joined transcript text
+    fits max_tokens. Returns (possibly-truncated segments, whether any
+    truncation happened) so the caller can log an observable warning instead
+    of relying on Ollama's silent truncation past num_ctx."""
+    full_text = " ".join(s.text.strip() for s in segments).strip()
+    if estimate_tokens(full_text) <= max_tokens or not segments:
+        return segments, False
+
+    kept = list(segments)
+    while len(kept) > 1:
+        kept.pop()
+        text = " ".join(s.text.strip() for s in kept).strip()
+        if estimate_tokens(text) <= max_tokens:
+            break
+    return kept, True

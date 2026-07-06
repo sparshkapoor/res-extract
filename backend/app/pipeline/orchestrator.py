@@ -8,7 +8,7 @@ from pathlib import Path
 from app.cache import result_cache
 from app.config import get_settings
 from app.jobs import job_manager
-from app.models import JobStatus, Platform, Recipe
+from app.models import JobStatus, Platform, Recipe, TranscriptResult
 from app.pipeline import (
     citation_map,
     download,
@@ -107,6 +107,26 @@ async def run_pipeline(job_id: str, raw_url: str) -> None:
                 job_id, JobStatus.transcribed,
                 f"Transcript ready ({transcript_result.source}, {len(full_text)} chars)",
             )
+
+        # --- 4b. Transcript compaction + token budgeting ---------------------
+        # Segment-level, not string-level: a citation the LLM copies verbatim
+        # must stay a valid substring for citation_map below, so compaction
+        # only drops/merges whole segments, never rewrites text inside one
+        # that survives. The SAME compacted+budgeted segments feed both the
+        # LLM (via full_text) and citation_map further down, so the
+        # hallucination guard never sees a transcript the LLM didn't.
+        compacted_segments = transcript.compact_segments(transcript_result.segments)
+        budget_tokens = int(settings.ollama_num_ctx * 0.75) - extract_recipe.PASS1_PROMPT_OVERHEAD_TOKENS
+        budgeted_segments, truncated = transcript.budget_segments(compacted_segments, budget_tokens)
+        if truncated:
+            # Rare (pathologically long transcripts) — makes today's silent
+            # Ollama truncation past num_ctx into an observable event instead.
+            logger.warning(
+                "job %s: transcript truncated to fit token budget (%d -> %d segments)",
+                job_id, len(compacted_segments), len(budgeted_segments),
+            )
+        transcript_result = TranscriptResult(segments=budgeted_segments, source=transcript_result.source)
+        full_text = transcript_result.full_text
 
         # --- 5. LLM pass 1: transcript -> Recipe ----------------------------
         await job_manager.update_status(job_id, JobStatus.extracting, "Extracting recipe via Qwen2.5...")
