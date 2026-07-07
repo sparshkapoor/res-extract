@@ -25,7 +25,7 @@ export function FilterChips({ value, onChange }: FilterChipsProps) {
             key={opt.value}
             type="button"
             onClick={() => onChange(opt.value)}
-            className={`press-scale shrink-0 rounded-full border px-4 py-2 text-[13px] font-medium transition-colors ${
+            className={`press-scale shrink-0 rounded-full border px-4 py-2 text-[13px] font-medium transition-colors duration-200 ease-spring ${
               active
                 ? "border-accent bg-accent text-accent-on"
                 : "border-hairline bg-surface-2 text-text-muted"

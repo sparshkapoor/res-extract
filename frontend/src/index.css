@@ -35,6 +35,19 @@
   --radius-md: 14px;
   --radius-lg: 20px;
   --radius-pill: 9999px;
+
+  /* Apple's "sheet" spring — used for phase transitions and the hero's
+     load-in entrance (see hooks/useHeroScrollReveal.ts, which mirrors this
+     exact curve as a JS string since GSAP eases aren't read from CSS custom
+     properties — keep the two in sync if this ever changes). Generates the
+     `ease-spring` Tailwind utility. */
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Display type step for the landing hero's headline — sized well past the
+     editorial scale in DESIGN.md's typography table, so it gets its own
+     token rather than stretching `headline-display`. Generates the
+     `text-display-xl` Tailwind utility. */
+  --text-display-xl: clamp(44px, 12vw, 60px);
 }
 
 :root {
@@ -42,6 +55,12 @@
   font-family: var(--font-prose);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Fraunces is loaded as a true variable font (see index.html) specifically
+     so this can pick the right optical-size cut automatically at any
+     rendered size — the display-xl landing headline and a body-size
+     ingredient name shouldn't use the same underlying glyph shapes. No-op
+     on Inter/JetBrains Mono, which don't expose an opsz axis. */
+  font-optical-sizing: auto;
 }
 
 body {
@@ -81,9 +100,11 @@ textarea {
 }
 
 /* Press state is a scale-down, never a color/shadow change — the one
-   system-wide micro-interaction, used on every tappable element. */
+   system-wide micro-interaction, used on every tappable element. Spring
+   ease gives the release a slight overshoot-settle instead of a linear
+   snap-back. */
 .press-scale {
-  transition: transform 0.15s ease;
+  transition: transform 0.2s var(--ease-spring);
 }
 .press-scale:active {
   transform: scale(0.96);
@@ -114,25 +135,91 @@ textarea {
   bottom: max(env(safe-area-inset-bottom), 1rem);
 }
 
+/* Stronger glass treatment for surfaces that want more presence than the
+   standard glass-tile (GlassCard's default) — e.g. GlassCard
+   variant="vibrant". Same translucent-white-tint rule from DESIGN.md still
+   applies (never a dark scrim); this only pushes blur/saturate further. */
+.vibrancy {
+  backdrop-filter: blur(28px) saturate(190%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
 /* --- Motion --------------------------------------------------------- */
 
-/* Slow ambient drift on the amber radial-glow background — applied app-wide
-   (not just the idle screen). Subtle on purpose: this is atmosphere behind
-   flat chrome, not a foreground effect. */
-@keyframes ambient-drift {
+/* Ambient blob background — two soft, blurred amber/orange blobs that
+   actually drift across the viewport (transform, not just background-
+   position), each on its own path/duration so they never sync up. Stays
+   within the one-accent amber family (accent + accent-strong at varying
+   opacity) rather than introducing a second hue — see DESIGN.md "one
+   accent color" rule; revisit if a multi-hue version is wanted later.
+   `.ambient-glow` establishes its own stacking context (isolation) and
+   clips (overflow-hidden) so the blobs can move well outside their own
+   footprint without ever pushing the page's actual scroll size around or
+   floating above real content. */
+.ambient-glow {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.ambient-glow::before,
+.ambient-glow::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  border-radius: 50%;
+  filter: blur(70px);
+  pointer-events: none;
+  will-change: transform;
+}
+
+.ambient-glow::before {
+  top: -15%;
+  left: -15%;
+  width: 65vw;
+  height: 65vw;
+  max-width: 640px;
+  max-height: 640px;
+  background: radial-gradient(circle, rgba(245, 166, 35, 0.32), transparent 70%);
+  animation: blob-drift-a 16s ease-in-out infinite;
+}
+
+.ambient-glow::after {
+  bottom: -20%;
+  right: -15%;
+  width: 55vw;
+  height: 55vw;
+  max-width: 560px;
+  max-height: 560px;
+  background: radial-gradient(circle, rgba(217, 134, 10, 0.28), transparent 70%);
+  animation: blob-drift-b 20s ease-in-out infinite;
+}
+
+@keyframes blob-drift-a {
   0%,
   100% {
-    background-position: 50% -10%;
-    opacity: 0.85;
+    transform: translate(0, 0) scale(1);
   }
-  50% {
-    background-position: 56% -4%;
-    opacity: 1;
+  33% {
+    transform: translate(8vw, 6vh) scale(1.12);
+  }
+  66% {
+    transform: translate(-4vw, 10vh) scale(0.95);
   }
 }
 
-.animate-ambient-drift {
-  animation: ambient-drift 14s ease-in-out infinite;
+@keyframes blob-drift-b {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  40% {
+    transform: translate(-10vw, -8vh) scale(1.15);
+  }
+  75% {
+    transform: translate(6vw, -4vh) scale(0.92);
+  }
 }
 
 @keyframes fade-in-up {
@@ -147,8 +234,29 @@ textarea {
 }
 
 .animate-fade-in-up {
-  animation: fade-in-up 500ms ease-out both;
+  animation: fade-in-up 550ms var(--ease-spring) both;
   animation-delay: calc(var(--stagger-index, 0) * 60ms);
+}
+
+/* Sheet-like phase transition — a small pop-in, used for state changes
+   that replace one piece of content with another in place (e.g. the
+   submit button's spinner morph, a milestone's checkmark landing) rather
+   than a full section mounting for the first time (that's fade-in-up).
+   Pair with a `key` change on the element so React actually remounts it
+   and the animation replays every time. */
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-scale-in {
+  animation: scale-in 350ms var(--ease-spring) both;
 }
 
 @keyframes shimmer {

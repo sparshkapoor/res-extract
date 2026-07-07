@@ -54,7 +54,12 @@ export function ProgressView({ status, message, error, elapsedSeconds }: Progres
             {isFailed && error ? (
               <XCircle size={22} weight="fill" className="shrink-0 text-danger" />
             ) : isComplete ? (
-              <CheckCircle size={22} weight="fill" className="shrink-0 text-accent" />
+              // React already remounts this element fresh the instant a
+              // milestone flips from Spinner/CircleDashed to CheckCircle
+              // (different component type => new element in the ternary),
+              // so animate-scale-in's pop plays automatically on completion
+              // with no extra `key` needed.
+              <CheckCircle size={22} weight="fill" className="animate-scale-in shrink-0 text-accent" />
             ) : isActive ? (
               <Spinner size={22} weight="bold" className="shrink-0 animate-spin text-accent" />
             ) : (

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { ImageBroken, BookmarkSimple } from "@phosphor-icons/react";
+import { BookmarkSimple } from "@phosphor-icons/react";
 import { listSavedRecipes } from "../api/client";
 import type { SavedRecipeSummary } from "../types/recipe";
 import { SearchBar } from "./SearchBar";
 import { FilterChips, type PlatformFilter } from "./FilterChips";
 import { Skeleton } from "./ui/Skeleton";
+import { RecipeThumbnailTile } from "./ui/RecipeThumbnailTile";
 import { staggerStyle } from "../lib/motion";
 
 interface SavedRecipesListProps {
@@ -70,31 +71,14 @@ export function SavedRecipesList({ onSelect }: SavedRecipesListProps) {
       {filtered !== null && filtered.length > 0 && (
         <div className="grid grid-cols-2 gap-3">
           {filtered.map((r, i) => (
-            <button
+            <RecipeThumbnailTile
               key={r.url_hash}
-              type="button"
-              onClick={() => onSelect(r.url_hash)}
-              className="group press-scale animate-fade-in-up relative aspect-[4/5] overflow-hidden rounded-lg bg-surface-2 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.35)] transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-1 hover:scale-[1.015] hover:shadow-[0_20px_40px_-12px_rgba(0,0,0,0.5)]"
+              recipe={r}
+              onSelect={onSelect}
+              size="grid"
+              className="aspect-[4/5]"
               style={staggerStyle(i)}
-            >
-              {r.thumbnail ? (
-                <img src={r.thumbnail} alt="" className="h-full w-full object-cover" loading="lazy" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center">
-                  <ImageBroken size={24} className="text-text-faint" />
-                </div>
-              )}
-              <div
-                className="absolute inset-x-0 bottom-0 border-t border-t-[var(--color-glass-border-top)] bg-white/[0.08] px-3 py-2.5 text-left backdrop-blur-[22px] backdrop-saturate-[1.65] transition-[backdrop-filter] duration-200 ease-out group-hover:backdrop-blur-[26px] group-hover:backdrop-saturate-[1.8]"
-              >
-                <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-text-muted">
-                  {r.platform}
-                </span>
-                <p className="font-editorial truncate text-[16px] font-semibold leading-[1.2] text-text">
-                  {r.title}
-                </p>
-              </div>
-            </button>
+            />
           ))}
         </div>
       )}

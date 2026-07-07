@@ -21,7 +21,11 @@ export function UrlSubmitForm({ onSubmit, submitting, error }: UrlSubmitFormProp
       <label htmlFor="video-url" className="text-[11px] font-bold uppercase tracking-[0.08em] text-text-muted">
         YouTube Short or Instagram Reel URL
       </label>
-      <div className="flex items-center gap-2 rounded-full border border-hairline bg-surface-2 px-5 py-3 focus-within:border-accent">
+      {/* 56px-tall pill (py-4 + the 24px icon/text line) with an amber focus
+          glow layered on top of the existing border-color change — the
+          landing form is the single highest-intent action on the screen, so
+          it gets more presence than a standard precision-input. */}
+      <div className="flex items-center gap-2 rounded-full border border-hairline bg-surface-2 px-6 py-4 transition-[border-color,box-shadow] duration-200 ease-spring focus-within:border-accent focus-within:shadow-[0_0_0_4px_rgba(245,166,35,0.15)]">
         <Link size={18} weight="bold" className="shrink-0 text-text-muted" />
         <input
           id="video-url"
@@ -40,14 +44,19 @@ export function UrlSubmitForm({ onSubmit, submitting, error }: UrlSubmitFormProp
         </p>
       )}
       <Button type="submit" disabled={submitting || !url.trim()} className="self-start">
-        {submitting ? (
-          <span className="flex items-center gap-2">
-            <Spinner size={18} className="animate-spin" weight="bold" />
-            Extracting...
-          </span>
-        ) : (
-          "Extract recipe"
-        )}
+        {/* Remounts (via the `key` swap) whenever `submitting` flips, so the
+            scale-in entrance plays fresh each time — a lightweight "morph"
+            between the two states without a full animation library. */}
+        <span key={submitting ? "loading" : "idle"} className="animate-scale-in flex items-center gap-2">
+          {submitting ? (
+            <>
+              <Spinner size={18} className="animate-spin" weight="bold" />
+              Extracting...
+            </>
+          ) : (
+            "Extract recipe"
+          )}
+        </span>
       </Button>
     </form>
   );
