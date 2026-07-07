@@ -98,7 +98,9 @@ async def evaluate_live(case: GoldenCase, save_fixture: bool, trials: int) -> di
     for _ in range(trials):
         raw_recipe = await _run_llm_chain(case)
         recipe = _finish(raw_recipe, case)
-        trial_results.append(metrics.evaluate(recipe, case.expected, case.transcript.segments))
+        trial_results.append(
+            metrics.evaluate(recipe, case.expected, case.transcript.segments, case.duration_seconds)
+        )
     if save_fixture and raw_recipe is not None:
         FIXTURES_DIR.mkdir(parents=True, exist_ok=True)
         (FIXTURES_DIR / f"{case.id}.json").write_text(raw_recipe.model_dump_json(indent=2))
@@ -112,7 +114,7 @@ def evaluate_offline(case: GoldenCase) -> dict | None:
         return None
     raw_recipe = Recipe.model_validate_json(fixture_path.read_text())
     recipe = _finish(raw_recipe, case)
-    result = metrics.evaluate(recipe, case.expected, case.transcript.segments)
+    result = metrics.evaluate(recipe, case.expected, case.transcript.segments, case.duration_seconds)
     # A frozen-fixture replay is fully deterministic — no sampling variance
     # to average over, so it's always exactly one "trial".
     return {"trials": [result], "mean": result}

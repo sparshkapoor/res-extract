@@ -6,7 +6,7 @@ network, no models — so `run_eval.py --offline` can compute them in CI.
 import re
 
 from app.models import Ingredient, Recipe, TranscriptSegment
-from app.pipeline import citation_map
+from app.pipeline import citation_map, validate
 from app.pipeline.normalize import normalize_ingredient
 
 from evals.schema import Expected, ExpectedIngredient
@@ -153,10 +153,18 @@ def step_count_in_range(recipe: Recipe, expected: Expected) -> bool:
     return lo <= len(recipe.steps) <= hi
 
 
-def evaluate(recipe: Recipe, expected: Expected, segments: list[TranscriptSegment]) -> dict:
+def evaluate(
+    recipe: Recipe, expected: Expected, segments: list[TranscriptSegment], duration_seconds: float = 0.0
+) -> dict:
     normalized_predicted = [normalize_ingredient(i) for i in recipe.ingredients]
     f1 = ingredient_f1(normalized_predicted, expected.ingredients)
-    return {
+    # Reuses validate.py (WS4a) rather than reimplementing step-granularity
+    # scoring here, so the eval harness and the live pipeline's own
+    # corrective-retry gate can never disagree on what "terse"/"low coverage"
+    # means.
+    validation = validate.validate_recipe(recipe, segments, duration_seconds)
+    word_counts = [len(s.instruction.split()) for s in recipe.steps]
+    result = {
         "title_matches": title_matches(recipe, expected),
         "step_count_in_range": step_count_in_range(recipe, expected),
         "ingredient_precision": f1["precision"],
@@ -165,7 +173,19 @@ def evaluate(recipe: Recipe, expected: Expected, segments: list[TranscriptSegmen
         "unit_accuracy": unit_accuracy(normalized_predicted, expected.ingredients),
         "quantity_accuracy": quantity_accuracy(normalized_predicted, expected.ingredients),
         "citation_validity_rate": citation_validity_rate(recipe, segments),
+        "transcript_coverage": validation.transcript_coverage,
+        "terse_step_rate": len(validation.terse_step_indexes) / len(recipe.steps) if recipe.steps else 0.0,
+        "mean_instruction_words": sum(word_counts) / len(word_counts) if word_counts else 0.0,
+        "max_instruction_words": float(max(word_counts)) if word_counts else 0.0,
+        "step_count_floor_pass": validation.step_count_ok,
     }
+    # Only scored when a golden case opts in — absent/None means "not
+    # checked" for cases without these expectations set (see schema.py).
+    if expected.min_transcript_coverage is not None:
+        result["min_coverage_ok"] = validation.transcript_coverage >= expected.min_transcript_coverage
+    if expected.max_terse_steps is not None:
+        result["terse_steps_ok"] = len(validation.terse_step_indexes) <= expected.max_terse_steps
+    return result
 
 
 def aggregate(per_case_results: list[dict]) -> dict:
