@@ -88,11 +88,20 @@ correct way to represent this. Set `name_is_generic=false` for every specificall
 # Refine passes (OCR-text and description-text ingredient refinement) never
 # touch steps and never need the full extraction ruleset above — sending the
 # ~50-line pass-1 prompt on every one of these smaller calls was pure waste.
+# NOTE: an earlier, shorter version of this prompt dropped the "copy concrete
+# values in" rule below and measurably regressed quality — live-eval testing
+# on the rye-pitas golden case showed the model would leave an ingredient at
+# quantity=null/is_estimated=true even when the description stated an exact
+# amount for it (e.g. "1 lb ground beef" never landing in the output). The
+# task-specific instructions in _build_description_prompt/_build_pass2_prompt
+# alone were not enough to reproduce the old full-prompt behavior.
 _SYSTEM_INGREDIENT_REFINE = f"""You are revising a recipe's ingredient list using one additional source \
 of text. Output must conform exactly to the given JSON schema. `unit` must be one of these canonical \
-tokens, or null: {_UNIT_GLOSSARY} — never a free-text note, a preposition phrase, or a number. Follow the \
-specific revision instructions in the user message exactly, and change nothing they don't ask you to \
-change."""
+tokens, or null: {_UNIT_GLOSSARY} — never a free-text note, a preposition phrase, or a number. If the \
+source text states a concrete quantity/unit for an ingredient that was previously null or estimated, you \
+MUST copy that concrete value into quantity/unit and set is_estimated=false — never leave quantity=null \
+once a real value is available in the text you were given. Follow the specific revision instructions in \
+the user message exactly, and change nothing they don't ask you to change."""
 
 _SYSTEM_PROOFREAD = """You are proofreading recipe step instructions against the transcript citation each \
 was derived from. Output must conform exactly to the given JSON schema. Fix only instructions that are \
