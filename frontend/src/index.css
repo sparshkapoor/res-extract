@@ -90,12 +90,28 @@ textarea {
 }
 
 /* Safe-area insets so the UI bleeds correctly into the Dynamic Island / home
-   indicator instead of sitting under a hard edge. */
+   indicator instead of sitting under a hard edge. Padding-based — correct
+   for a flow-layout container (e.g. App.tsx's idle-phase column), which
+   just needs its content pushed inward from the edges. */
 .safe-top {
   padding-top: max(env(safe-area-inset-top), 1rem);
 }
 .safe-bottom {
   padding-bottom: max(env(safe-area-inset-bottom), 1rem);
+}
+
+/* Safe-area position insets — for absolutely/fixed-positioned elements
+   offset from an edge via top/bottom (e.g. RecipeCard's back button and
+   metadata panel, both positioned over the hero photo). Padding has no
+   effect on where a positioned box sits — only an inset value does — so
+   these exist separately from .safe-top/.safe-bottom above; use these
+   instead of a raw top-4/bottom-4 Tailwind utility on anything
+   `absolute`/`fixed` near a screen edge, never the padding classes. */
+.safe-inset-top {
+  top: max(env(safe-area-inset-top), 1rem);
+}
+.safe-inset-bottom {
+  bottom: max(env(safe-area-inset-bottom), 1rem);
 }
 
 /* --- Motion --------------------------------------------------------- */

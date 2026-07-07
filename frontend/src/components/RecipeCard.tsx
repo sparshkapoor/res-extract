@@ -88,7 +88,7 @@ export function RecipeCard({ recipe, onReset }: RecipeCardProps) {
 
   return (
     <div className="flex w-full max-w-[560px] flex-col bg-canvas pb-10">
-      <div ref={heroContainerRef} className="relative -mt-10 aspect-[3/4] w-full overflow-hidden bg-surface-2">
+      <div ref={heroContainerRef} className="relative aspect-[3/4] w-full overflow-hidden bg-surface-2">
         {heroImage && (
           <img ref={heroImageRef} src={heroImage} alt={recipe.title} className="h-full w-full object-cover" />
         )}
@@ -98,35 +98,55 @@ export function RecipeCard({ recipe, onReset }: RecipeCardProps) {
         <button
           type="button"
           onClick={onReset}
-          className="press-scale safe-top absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white"
+          className="press-scale safe-inset-top absolute left-4 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white"
           aria-label="Extract another recipe"
         >
           <ArrowLeft size={18} weight="bold" />
         </button>
 
-        <GlassCard ref={heroPanelRef} className="absolute inset-x-4 bottom-4 px-5 py-4">
-          <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-text-muted">
-            {recipe.platform}
-          </span>
-          <h1 className="mt-1 font-editorial text-[40px] font-bold leading-[1.05] tracking-[-0.01em] text-text">
-            {recipe.title}
-          </h1>
-          {metadata.length > 0 && (
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-              {metadata.map((m) => (
-                <span
-                  key={m.label}
-                  className={`inline-flex items-center gap-1.5 font-mono text-[15px] font-semibold tracking-[-0.01em] ${
-                    m.highlight ? "text-accent" : "text-text-muted"
-                  }`}
-                >
-                  <m.icon size={15} weight="bold" />
-                  {m.label}
-                </span>
-              ))}
+        {(() => {
+          const metadataContent = (
+            <>
+              <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-text-muted">
+                {recipe.platform}
+              </span>
+              <h1 className="mt-1 font-editorial text-[40px] font-bold leading-[1.05] tracking-[-0.01em] text-text">
+                {recipe.title}
+              </h1>
+              {metadata.length > 0 && (
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                  {metadata.map((m) => (
+                    <span
+                      key={m.label}
+                      className={`inline-flex items-center gap-1.5 font-mono text-[15px] font-semibold tracking-[-0.01em] ${
+                        m.highlight ? "text-accent" : "text-text-muted"
+                      }`}
+                    >
+                      <m.icon size={15} weight="bold" />
+                      {m.label}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </>
+          );
+          // Glass is reserved for panels sitting over real photography (see
+          // GlassCard) — with no hero image, the panel sits over a flat
+          // bg-surface-2 fill instead, so it gets a plain non-glass
+          // treatment rather than a glass effect with nothing to refract.
+          return heroImage ? (
+            <GlassCard ref={heroPanelRef} className="absolute inset-x-4 safe-inset-bottom px-5 py-4">
+              {metadataContent}
+            </GlassCard>
+          ) : (
+            <div
+              ref={heroPanelRef}
+              className="absolute inset-x-4 safe-inset-bottom rounded-lg bg-surface-2 px-5 py-4"
+            >
+              {metadataContent}
             </div>
-          )}
-        </GlassCard>
+          );
+        })()}
       </div>
 
       <div className="flex flex-col gap-8 px-4 pt-6">
