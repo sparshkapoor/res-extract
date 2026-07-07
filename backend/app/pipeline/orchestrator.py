@@ -52,6 +52,36 @@ async def _timed_stage(name: str):
         logger.info("[timing] %s: %.1fs", name, time.monotonic() - start)
 
 
+async def _extract_hero_candidates(video_path: Path, duration: float, job_frames_dir: Path) -> list[Path]:
+    """Hero-candidate frames — dedicated finished-dish candidates near the
+    start/end of the video, independent of any step's timestamp. The three
+    grabs are mutually independent (unlike step frames, no hash-chaining
+    between them), so they run concurrently. Fired as a background task by
+    the caller (see run_pipeline's step 7b) — this function itself never
+    fails the job, just logs and drops whichever candidate's grab failed."""
+    if duration <= 0:
+        return []
+    hero_timestamps = sorted(
+        {
+            max(0.0, min(1.5, duration - 0.1)),
+            max(0.0, min(duration * 0.85, duration - 0.1)),
+            max(0.0, duration - 1.5),
+        }
+    )
+
+    async def _grab(i: int, ts: float) -> Path | None:
+        out_path = job_frames_dir / f"hero_{i}.jpg"
+        try:
+            await frames.extract_frame(video_path, ts, out_path)
+            return out_path
+        except frames.FrameExtractionError as e:
+            logger.warning("hero-candidate frame extraction failed at %.1fs: %s", ts, e)
+            return None
+
+    results = await asyncio.gather(*(_grab(i, ts) for i, ts in enumerate(hero_timestamps)))
+    return [p for p in results if p is not None]
+
+
 async def run_pipeline(job_id: str, raw_url: str) -> None:
     settings = get_settings()
     url = normalize_url(raw_url)
@@ -198,21 +228,44 @@ async def run_pipeline(job_id: str, raw_url: str) -> None:
                 logger.info("job %s: retry produced no steps, keeping original attempt", job_id)
 
         # --- 5c. Refine ingredients with the video's own written description ---
-        # Runs before OCR refinement so OCR only has to incrementally improve an
-        # already-good list, not start from raw transcript-only extraction.
-        # Ingredients have no citation requirement (unlike steps), so this
-        # non-timestamped text is safe to use here the same way OCR text is.
+        # (WS5) Fired as a background task rather than awaited inline — it
+        # only touches recipe.ingredients, so it can run concurrently with
+        # frame extraction/OCR below instead of blocking ahead of them,
+        # hiding a full LLM round-trip behind ffmpeg/Vision work. Awaited
+        # just before OCR-refine (9), which needs the description-refined
+        # list as its starting point — same effective ordering as before,
+        # now overlapped in wall-clock time instead of sequential.
+        description_task: asyncio.Task | None = None
+        description_task_start = 0.0
         if video_asset.description.strip():
             await job_manager.update_status(
                 job_id, JobStatus.extracting, "Refining ingredients from video description..."
             )
-            async with _timed_stage("llm_description_refine"):
-                recipe.ingredients = await extract_recipe.refine_ingredients_with_description(
-                    recipe.ingredients, video_asset.description
-                )
+            description_task_start = time.monotonic()
+            description_task = asyncio.create_task(
+                extract_recipe.refine_ingredients_with_description(recipe.ingredients, video_asset.description)
+            )
 
         await job_manager.update_status(
             job_id, JobStatus.extracted, f"Extracted {len(recipe.steps)} steps, {len(recipe.ingredients)} ingredients"
+        )
+
+        # --- 7b. Hero-candidate frames ---------------------------------------------
+        # (WS5) Fired as a background task here, before step-frame extraction
+        # starts, so its ffmpeg grabs overlap with the step-frame loop, OCR,
+        # the description-refine task above, and the OCR-refine/proofread LLM
+        # calls below — hero_candidate_paths isn't actually needed until the
+        # VLM pass (10), the first and only place it's used. Dedicated
+        # finished-dish candidates, independent of any step's timestamp — step
+        # frames are inherently instructional moments (chopping, stirring, a
+        # bite/reaction shot), never a reliable stand-in for "the finished
+        # dish". Sampled near the start (common cold-open shot) and end
+        # (common outro/plated shot) of the video; scored by the VLM in step
+        # 10. The three grabs are mutually independent (no hash-chaining like
+        # step frames), so they run concurrently via asyncio.gather.
+        hero_task_start = time.monotonic()
+        hero_task = asyncio.create_task(
+            _extract_hero_candidates(video_asset.video_path, video_asset.duration_seconds, job_frames_dir)
         )
 
         # --- 7. Frame extraction per step ---------------------------------------
@@ -232,7 +285,9 @@ async def run_pipeline(job_id: str, raw_url: str) -> None:
         # step-photo repeats by spreading citations across the real narration;
         # this catches what's left — long static shots (e.g. a simmering pot
         # with no camera cuts) where even a nudged timestamp still looks
-        # identical to the previous step's frame.
+        # identical to the previous step's frame. Each step's extraction needs
+        # the previous step's hash, so this loop stays sequential internally
+        # even though it now runs concurrently with hero_task/description_task.
         last_frame_hash: int | None = None
         async with _timed_stage("frame_extraction"):
             for i, step in enumerate(recipe.steps):
@@ -251,30 +306,6 @@ async def run_pipeline(job_id: str, raw_url: str) -> None:
                     logger.warning("frame extraction failed for step %d: %s", step.index, e)
         await job_manager.update_status(job_id, JobStatus.frames_done, f"Extracted {len(frame_paths)} frames")
 
-        # --- 7b. Hero-candidate frames ---------------------------------------------
-        # Dedicated finished-dish candidates, independent of any step's timestamp —
-        # step frames are inherently instructional moments (chopping, stirring, a
-        # bite/reaction shot), never a reliable stand-in for "the finished dish".
-        # Sampled near the start (common cold-open shot) and end (common outro/
-        # plated shot) of the video; scored by the VLM in step 10 below.
-        hero_candidate_paths: list[Path] = []
-        duration = video_asset.duration_seconds
-        if duration > 0:
-            hero_timestamps = sorted(
-                {
-                    max(0.0, min(1.5, duration - 0.1)),
-                    max(0.0, min(duration * 0.85, duration - 0.1)),
-                    max(0.0, duration - 1.5),
-                }
-            )
-            for i, ts in enumerate(hero_timestamps):
-                out_path = job_frames_dir / f"hero_{i}.jpg"
-                try:
-                    await frames.extract_frame(video_asset.video_path, ts, out_path)
-                    hero_candidate_paths.append(out_path)
-                except frames.FrameExtractionError as e:
-                    logger.warning("hero-candidate frame extraction failed at %.1fs: %s", ts, e)
-
         # --- 8. OCR per frame + dedupe -------------------------------------------
         await job_manager.update_status(job_id, JobStatus.ocr, "Running OCR on frames (Apple Vision)...")
         # Parallel, unlike the VLM/LLM calls elsewhere in this file — Apple
@@ -284,6 +315,14 @@ async def run_pipeline(job_id: str, raw_url: str) -> None:
         async with _timed_stage("ocr"):
             per_frame_text = await asyncio.gather(*(ocr.ocr_frame(p) for p in frame_paths))
         ocr_text = ocr.dedupe_ocr_text(per_frame_text)
+
+        # --- 9a. Resolve the background description-refine task (WS5) -----------
+        if description_task is not None:
+            recipe.ingredients = await description_task
+            logger.info(
+                "[timing] llm_description_refine: %.1fs (overlapped with frame_extraction/ocr)",
+                time.monotonic() - description_task_start,
+            )
 
         # --- 9. LLM pass 2 (only if OCR found text) --------------------------------
         # Scoped to ingredients only — see extract_recipe._build_pass2_prompt for
@@ -318,6 +357,13 @@ async def run_pipeline(job_id: str, raw_url: str) -> None:
         # this.) This is the last-resort visual fallback for ingredient identity,
         # after every text-based source has failed.
         await job_manager.update_status(job_id, JobStatus.refining, "Selecting hero photo, estimating quantities...")
+        # Resolve the background hero-candidate task (WS5) — first place it's
+        # actually needed, after overlapping with everything since step 7b.
+        hero_candidate_paths = await hero_task
+        logger.info(
+            "[timing] hero_candidate_frames: %.1fs (overlapped with frame_extraction/ocr/refine stages)",
+            time.monotonic() - hero_task_start,
+        )
         try:
             async with _timed_stage("vlm_refine"):
                 recipe = await vlm.refine_estimates_with_vision(recipe, job_frames_dir, hero_candidate_paths)
