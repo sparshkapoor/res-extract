@@ -35,7 +35,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from app.models import Recipe, TranscriptResult
-from app.pipeline import citation_map, extract_recipe, transcript
+from app.pipeline import citation_map, extract_recipe, transcript, validate
 from app.pipeline.normalize import normalize_recipe
 
 from evals import metrics
@@ -67,11 +67,34 @@ def load_golden_cases(case_filter: str | None) -> list[GoldenCase]:
 
 
 async def _run_llm_chain(case: GoldenCase) -> Recipe:
-    """Mirrors orchestrator.py's LLM-only stages, in order: pass 1 ->
-    description refine -> OCR refine -> proofread. Deliberately stops
-    before citation mapping / normalize so the fixture captures exactly
-    the recipe state a real run would hand to citation_map."""
+    """Mirrors orchestrator.py's stages, in order: pass 1 -> citation mapping
+    -> step-granularity validation with a bounded corrective retry (WS4a) ->
+    description refine -> OCR refine -> proofread. The retry decision needs
+    citations already mapped, so this does an early citation_map pass of its
+    own — harmless since _finish()'s later pass is deterministic given the
+    same steps/segments and simply reproduces the same timestamps. Without
+    mirroring the retry here, eval numbers would understate what production
+    actually delivers to users (who get the retry's second chance)."""
     recipe = await extract_recipe.call_llm(case.transcript.full_text, case.url, case.platform)
+    recipe.steps, _unmatched = citation_map.map_steps_to_timestamps(
+        recipe.steps, case.transcript.segments, case.duration_seconds
+    )
+    validation = validate.validate_recipe(recipe, case.transcript.segments, case.duration_seconds)
+    if validation.needs_retry:
+        corrective_note = validate.build_corrective_note(recipe, validation, case.duration_seconds)
+        retry_recipe = await extract_recipe.call_llm(
+            case.transcript.full_text, case.url, case.platform, corrective_note=corrective_note
+        )
+        if retry_recipe.steps:
+            retry_recipe.steps, _retry_unmatched = citation_map.map_steps_to_timestamps(
+                retry_recipe.steps, case.transcript.segments, case.duration_seconds
+            )
+            retry_validation = validate.validate_recipe(
+                retry_recipe, case.transcript.segments, case.duration_seconds
+            )
+            if retry_validation.transcript_coverage > validation.transcript_coverage:
+                recipe = retry_recipe
+
     if case.description:
         recipe.ingredients = await extract_recipe.refine_ingredients_with_description(
             recipe.ingredients, case.description
