@@ -20,7 +20,7 @@ def _best_fuzzy_match(citation: str, segments: list[TranscriptSegment]) -> Trans
     return best_segment if best_ratio >= _FUZZY_MATCH_THRESHOLD else None
 
 
-def resolve_timestamp(citation: str, segments: list[TranscriptSegment]) -> float | None:
+def _resolve_segment(citation: str, segments: list[TranscriptSegment]) -> TranscriptSegment | None:
     citation_lower = citation.strip().lower()
     if not citation_lower or not segments:
         return None
@@ -30,14 +30,24 @@ def resolve_timestamp(citation: str, segments: list[TranscriptSegment]) -> float
     for segment in segments:
         segment_lower = segment.text.lower()
         if citation_lower in segment_lower or segment_lower in citation_lower:
-            return segment.start
+            return segment
 
     # 2. Fuzzy fallback for near-verbatim LLM drift.
-    match = _best_fuzzy_match(citation_lower, segments)
-    if match is not None:
-        return match.start
+    return _best_fuzzy_match(citation_lower, segments)
 
-    return None
+
+def resolve_timestamp(citation: str, segments: list[TranscriptSegment]) -> float | None:
+    segment = _resolve_segment(citation, segments)
+    return segment.start if segment is not None else None
+
+
+def resolve_span(citation: str, segments: list[TranscriptSegment]) -> tuple[float, float] | None:
+    """Same matching as resolve_timestamp, but returns the matched segment's
+    full (start, end) span instead of just its start. Used by validate.py to
+    measure how much of the transcript's timeline the steps' citations
+    actually cover, not just their point-in-time order."""
+    segment = _resolve_segment(citation, segments)
+    return (segment.start, segment.end) if segment is not None else None
 
 
 def map_steps_to_timestamps(
