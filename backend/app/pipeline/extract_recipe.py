@@ -289,6 +289,12 @@ def _chat_sync(prompt: str, schema: type[BaseModel], system: str, few_shot: list
         format=schema.model_json_schema(),
         keep_alive=settings.ollama_keep_alive,
         options={"temperature": settings.llm_temperature, "num_ctx": settings.ollama_num_ctx},
+        # Qwen3-family models default to emitting a hidden chain-of-thought
+        # ("thinking") pass before the actual response — 10x+ slower and
+        # pointless for JSON-constrained extraction where we only want the
+        # schema-conforming answer. Harmless no-op on non-thinking models
+        # like qwen2.5 (confirmed: identical output, ignored silently).
+        think=False,
     )
     return json.loads(response["message"]["content"])
 
