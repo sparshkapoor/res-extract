@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api import routes_result, routes_status, routes_submit
 from app.config import get_settings
 from app.db import init_db, sweep_orphaned_jobs
+from app.pipeline import vlm
 
 logging.basicConfig(level=logging.INFO)
 
@@ -37,6 +38,13 @@ async def on_startup() -> None:
     swept = await sweep_orphaned_jobs()
     if swept:
         logging.getLogger(__name__).warning("swept %d orphaned job(s) from a prior restart", swept)
+
+
+@app.on_event("shutdown")
+async def on_shutdown() -> None:
+    # WS5: the VLM worker is now a long-lived subprocess (see vlm.py) —
+    # clean it up on server shutdown rather than leaving it orphaned.
+    await vlm.shutdown()
 
 
 @app.get("/api/health")

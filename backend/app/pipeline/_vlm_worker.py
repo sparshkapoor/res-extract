@@ -1,19 +1,27 @@
-"""Standalone VLM worker, invoked as a subprocess by vlm.py.
+"""Standalone VLM worker, invoked as a persistent subprocess by vlm.py.
 
-Same rationale as _asr_worker.py: Qwen2.5-VL is loaded once per subprocess
-invocation (amortizing model-load cost across every request in the batch),
-and process exit guarantees its Metal memory is fully released — this runs
-*after* Ollama's text pass, and Ollama's Qwen2.5 7B stays resident via
-keep_alive, so isolating the VLM in its own process keeps peak memory
-predictable instead of stacking two long-lived model residencies in one
-Python process.
+(WS5) Qwen2.5-VL is loaded ONCE per subprocess lifetime, not once per
+call — the process stays alive across many batches (potentially spanning
+several jobs) and is only torn down by vlm.py's idle-timeout or shutdown,
+which is what actually releases its Metal memory. This replaces the
+earlier spawn-per-call design (load model -> serve exactly one batch ->
+exit), which cold-loaded the VLM from disk on every single call — up to
+twice per job (once for the silent-video narration fallback, once for the
+final hero/quantity refinement pass) — a multi-second tax paid repeatedly
+for no reason once the worker can just stay warm between calls. Isolating
+it in its own process (rather than loading it in-process alongside
+Ollama's client) still matters for the same reason as before: exiting the
+process is the only way to fully release its Metal allocation, which is
+now the *idle-timeout* path instead of the *every-call* path.
 
 Usage: python _vlm_worker.py <model_name>
-Reads a JSON array from stdin, one dict per request, each tagged with a
-"task" field ("quantity" | "identify" | "narrate" | "hero", default "quantity"
-for backward compatibility). Prints a single JSON line to stdout — one result
-dict per request, same order/id-based shape regardless of task, so callers
-in vlm.py parse a single result format either way.
+Loads the model, then prints one JSON line `{"ready": true}` to signal it
+can accept work. From then on, reads one JSON-array line from stdin per
+batch (one dict per request, each tagged with a "task" field — "quantity"
+| "identify" | "narrate" | "hero", default "quantity" for backward
+compatibility) and writes back one JSON-array line per batch, in the same
+order/id-based shape regardless of task. A line `{"cmd": "shutdown"}` (or
+stdin closing) ends the loop and the process exits cleanly.
 
   quantity: {"id", "image_path", "ingredient_name", "step_instruction"}
     -> {"id", "quantity", "unit"}
@@ -128,16 +136,8 @@ def _parse_result(req: dict, raw_text: str) -> dict:
     return {"id": req["id"], "quantity": quantity, "unit": unit}
 
 
-def main() -> None:
-    model_name = sys.argv[1]
-    requests = json.loads(sys.stdin.read())
-
-    from mlx_vlm import generate, load
-    from mlx_vlm.prompt_utils import apply_chat_template
-
-    model, processor = load(model_name)
+def _run_batch(model, processor, generate, apply_chat_template, requests: list[dict]) -> list[dict]:
     results = []
-
     for req in requests:
         prompt_text = _build_prompt(req)
         messages = [{"role": "user", "content": prompt_text}]
@@ -149,8 +149,36 @@ def main() -> None:
         except AttributeError:
             raw_text = ""
         results.append(_parse_result(req, raw_text))
+    return results
 
-    print(json.dumps(results))
+
+def main() -> None:
+    model_name = sys.argv[1]
+
+    from mlx_vlm import generate, load
+    from mlx_vlm.prompt_utils import apply_chat_template
+
+    model, processor = load(model_name)
+    # Signals the parent (vlm.py's _VlmWorkerManager) that the model is
+    # loaded and the serve loop below is ready to accept batches — the
+    # parent's spawn handshake blocks on this exact line.
+    print(json.dumps({"ready": True}), flush=True)
+
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            print(json.dumps({"error": "invalid JSON request line"}), flush=True)
+            continue
+
+        if isinstance(payload, dict) and payload.get("cmd") == "shutdown":
+            break
+
+        results = _run_batch(model, processor, generate, apply_chat_template, payload)
+        print(json.dumps(results), flush=True)
 
 
 if __name__ == "__main__":

@@ -1,10 +1,14 @@
 import asyncio
 import json
+import logging
 import sys
+import time
 from pathlib import Path
 
 from app.config import get_settings
 from app.models import Ingredient, Recipe
+
+logger = logging.getLogger(__name__)
 
 _WORKER_SCRIPT = Path(__file__).parent / "_vlm_worker.py"
 
@@ -17,6 +21,158 @@ _CONFIDENCE_RANK = {"high": 2, "medium": 1, "low": 0}
 
 class VlmError(RuntimeError):
     pass
+
+
+class _VlmWorkerManager:
+    """Persistent VLM subprocess manager (WS5) — replaces the old
+    spawn-per-call design (see _vlm_worker.py's module docstring for the
+    full memory story: Qwen 7B + ctx (~7.3GB, resident via Ollama's
+    keep_alive) + idle VLM (~3.5GB) + Whisper (~1GB) ≈ 12GB worst case on
+    the 16-18GB M1 Air; the idle timeout below is the pressure valve that
+    keeps the VLM's share from being permanent).
+
+    A module-level singleton (`_manager` below) — there is exactly one VLM
+    process for the whole server, ever, regardless of how many jobs are in
+    flight. `_lock` serializes requests to it (one VLM inference at a
+    time is the memory contract this whole design exists to protect), so
+    concurrent jobs needing vision simply queue behind each other rather
+    than racing for the same Metal allocation.
+    """
+
+    def __init__(self) -> None:
+        self._proc: asyncio.subprocess.Process | None = None
+        self._lock = asyncio.Lock()
+        self._last_used = 0.0
+        self._idle_task: asyncio.Task | None = None
+        self._stderr_task: asyncio.Task | None = None
+
+    async def _spawn(self) -> None:
+        settings = get_settings()
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable,
+            str(_WORKER_SCRIPT),
+            settings.vlm_model_name,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        assert proc.stdout is not None
+        try:
+            ready_line = await asyncio.wait_for(proc.stdout.readline(), timeout=settings.vlm_ready_timeout_seconds)
+            ready = json.loads(ready_line.decode().strip())
+            if not ready.get("ready"):
+                raise ValueError(f"unexpected ready line: {ready_line!r}")
+        except (TimeoutError, ValueError, json.JSONDecodeError) as e:
+            proc.kill()
+            await proc.wait()
+            raise VlmError(f"VLM worker failed to become ready: {e}") from e
+
+        self._proc = proc
+        self._stderr_task = asyncio.create_task(self._drain_stderr(proc))
+        if self._idle_task is None or self._idle_task.done():
+            self._idle_task = asyncio.create_task(self._idle_loop())
+
+    async def _drain_stderr(self, proc: asyncio.subprocess.Process) -> None:
+        # mlx_vlm/model loading can write progress/warnings to stderr; an
+        # unread pipe eventually fills its OS buffer and blocks the child's
+        # writes, silently deadlocking the whole worker. Just log it.
+        assert proc.stderr is not None
+        try:
+            async for line in proc.stderr:
+                logger.debug("vlm worker stderr: %s", line.decode(errors="replace").rstrip())
+        except (asyncio.CancelledError, ValueError):
+            pass
+
+    async def _idle_loop(self) -> None:
+        settings = get_settings()
+        try:
+            while True:
+                await asyncio.sleep(settings.vlm_idle_check_interval_seconds)
+                if self._proc is None:
+                    continue
+                if time.monotonic() - self._last_used < settings.vlm_idle_timeout_seconds:
+                    continue
+                async with self._lock:
+                    # Re-check under the lock — a request may have started
+                    # (and updated _last_used) while this task was asleep.
+                    if self._proc is not None and time.monotonic() - self._last_used >= settings.vlm_idle_timeout_seconds:
+                        logger.info("vlm: idle for %ds, unloading worker", settings.vlm_idle_timeout_seconds)
+                        await self._terminate(graceful=True)
+        except asyncio.CancelledError:
+            pass
+
+    async def _terminate(self, graceful: bool) -> None:
+        proc, self._proc = self._proc, None
+        if proc is None:
+            return
+        if graceful and proc.stdin is not None:
+            try:
+                proc.stdin.write((json.dumps({"cmd": "shutdown"}) + "\n").encode())
+                await proc.stdin.drain()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=5.0)
+        except TimeoutError:
+            proc.kill()
+            await proc.wait()
+        if self._stderr_task is not None:
+            self._stderr_task.cancel()
+            self._stderr_task = None
+
+    async def _send_batch(self, requests: list[dict]) -> list[dict]:
+        settings = get_settings()
+        assert self._proc is not None and self._proc.stdin is not None and self._proc.stdout is not None
+        self._proc.stdin.write((json.dumps(requests) + "\n").encode())
+        await self._proc.stdin.drain()
+        response_line = await asyncio.wait_for(
+            self._proc.stdout.readline(), timeout=settings.vlm_request_timeout_seconds
+        )
+        if not response_line:
+            raise VlmError("VLM worker closed its output unexpectedly")
+        return json.loads(response_line.decode())
+
+    async def call(self, requests: list[dict]) -> list[dict]:
+        """Sends one batch of requests to the (lazily spawned) persistent
+        worker and returns its results. On any failure — timeout, broken
+        pipe, garbage output — kills and respawns the worker and retries
+        this exact batch once; only raises VlmError if that retry also
+        fails. Both call sites already treat VlmError as best-effort and
+        degrade gracefully."""
+        async with self._lock:
+            self._last_used = time.monotonic()
+            try:
+                if self._proc is None:
+                    await self._spawn()
+                return await self._send_batch(requests)
+            except (TimeoutError, BrokenPipeError, ConnectionResetError, json.JSONDecodeError) as e:
+                logger.warning("vlm: request failed (%s) — killing and respawning worker, retrying once", e)
+                await self._terminate(graceful=False)
+                try:
+                    await self._spawn()
+                    return await self._send_batch(requests)
+                except Exception as e2:
+                    await self._terminate(graceful=False)
+                    raise VlmError(f"VLM worker failed after respawn+retry: {e2}") from e2
+            finally:
+                self._last_used = time.monotonic()
+
+    async def shutdown(self) -> None:
+        """Wired into FastAPI's shutdown hook (main.py) and the end of
+        scripts/smoke_test.py — stops the idle checker and cleanly tears
+        down the worker so nothing lingers after the parent process exits."""
+        if self._idle_task is not None:
+            self._idle_task.cancel()
+            self._idle_task = None
+        async with self._lock:
+            await self._terminate(graceful=True)
+
+
+_manager = _VlmWorkerManager()
+
+
+async def shutdown() -> None:
+    await _manager.shutdown()
 
 
 def _needs_estimate(ingredient) -> bool:
@@ -89,31 +245,14 @@ def _match_steps_to_generic_ingredients(recipe: Recipe) -> list[dict]:
 
 
 async def _call_worker(requests: list[dict]) -> dict[str, dict]:
-    """Shared subprocess plumbing for every VLM task type. Returns results
-    keyed by the request's `id`. Callers are responsible for `image_path`
-    already being a real on-disk path — this function does no URL resolution
-    of its own, since not every caller's paths need it (see
-    refine_estimates_with_vision vs. caption_frame_action)."""
-    settings = get_settings()
-
-    proc = await asyncio.create_subprocess_exec(
-        sys.executable,
-        str(_WORKER_SCRIPT),
-        settings.vlm_model_name,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await proc.communicate(json.dumps(requests).encode())
-
-    if proc.returncode != 0:
-        raise VlmError(f"VLM subprocess failed: {stderr.decode(errors='replace')[-2000:]}")
-
-    try:
-        last_line = stdout.decode(errors="replace").strip().splitlines()[-1]
-        return {r["id"]: r for r in json.loads(last_line)}
-    except (IndexError, json.JSONDecodeError) as e:
-        raise VlmError(f"Could not parse VLM worker output: {stdout.decode(errors='replace')[-2000:]}") from e
+    """Shared entry point for every VLM task type — routes through the
+    persistent worker manager (WS5) instead of spawning a fresh subprocess
+    per call. Returns results keyed by the request's `id`. Callers are
+    responsible for `image_path` already being a real on-disk path — this
+    function does no URL resolution of its own, since not every caller's
+    paths need it (see refine_estimates_with_vision vs. caption_frames)."""
+    results = await _manager.call(requests)
+    return {r["id"]: r for r in results}
 
 
 def _select_hero(hero_candidates: list[Path], results: dict[str, dict]) -> Path | None:

@@ -44,6 +44,19 @@ class Settings(BaseSettings):
     # Ollama's Qwen2.5 7B text pass, so the two must coexist in unified
     # memory even though ASR is unloaded by then. ~3.5GB peak observed.
     vlm_model_name: str = "mlx-community/Qwen2.5-VL-3B-Instruct-4bit"
+    # WS5: the VLM worker now stays resident across calls/jobs instead of
+    # reloading from disk every time — this idle timeout is what actually
+    # bounds its ~3.5GB share of unified memory, unloading it after this
+    # long with no requests (next request lazily respawns it).
+    vlm_idle_timeout_seconds: int = 600
+    vlm_idle_check_interval_seconds: int = 30
+    # Generous: covers cold model load (disk read + Metal init) on the M1
+    # Air, not just inference.
+    vlm_ready_timeout_seconds: float = 90.0
+    # Per-batch, not per-request — a single call can bundle several
+    # quantity/identify/hero requests (see vlm.refine_estimates_with_vision),
+    # processed sequentially inside the worker.
+    vlm_request_timeout_seconds: float = 120.0
 
     # Empty-transcript guard — below this, narration is too sparse to trust on
     # its own, so the pipeline falls back to vision-based narration instead of
