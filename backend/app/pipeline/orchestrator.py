@@ -227,13 +227,24 @@ async def run_pipeline(job_id: str, raw_url: str) -> None:
         # citation/timestamp semantics stay untouched (still load-bearing for
         # the hallucination guard above); this only fixes the visual symptom.
         last_extraction_ts = -1.0
+        # Perceptual-hash distinctness (WS4c) is defense-in-depth alongside the
+        # nudge above and WS4a's step decomposition: those two remove most
+        # step-photo repeats by spreading citations across the real narration;
+        # this catches what's left — long static shots (e.g. a simmering pot
+        # with no camera cuts) where even a nudged timestamp still looks
+        # identical to the previous step's frame.
+        last_frame_hash: int | None = None
         async with _timed_stage("frame_extraction"):
-            for step in recipe.steps:
+            for i, step in enumerate(recipe.steps):
                 ts = _nudge_forward((step.timestamp_seconds or 0.0) + 1.0, last_extraction_ts)
                 last_extraction_ts = ts
+                next_ts = recipe.steps[i + 1].timestamp_seconds if i + 1 < len(recipe.steps) else None
+                max_ts = next_ts if next_ts is not None and next_ts > ts else video_asset.duration_seconds
                 out_path = job_frames_dir / f"step_{step.index}.jpg"
                 try:
-                    await frames.extract_frame(video_asset.video_path, ts, out_path)
+                    _, last_frame_hash = await frames.extract_distinct_frame(
+                        video_asset.video_path, ts, out_path, last_frame_hash, max_timestamp=max(ts, max_ts)
+                    )
                     step.image_path = f"/media/jobs/{job_id}/{out_path.name}"
                     frame_paths.append(out_path)
                 except frames.FrameExtractionError as e:
