@@ -168,13 +168,21 @@ _FEW_SHOT_RECIPE = {
 }
 
 
-def _build_pass1_prompt(transcript_text: str, source_url: str, platform: Platform) -> str:
-    return (
+def _build_pass1_prompt(
+    transcript_text: str, source_url: str, platform: Platform, corrective_note: str | None = None
+) -> str:
+    prompt = (
         f"Source URL: {source_url}\n"
         f"Platform: {platform.value}\n\n"
         f"Transcript:\n{transcript_text}\n\n"
         "Extract the recipe as a JSON object matching the schema."
     )
+    if corrective_note:
+        # Appended by orchestrator.py's bounded retry when validate.py flags
+        # too-few/terse steps on the first attempt — built from that
+        # attempt's specific findings, not a generic nudge.
+        prompt += f"\n\n{corrective_note}"
+    return prompt
 
 
 _FEW_SHOT_MESSAGES = [
@@ -309,8 +317,10 @@ async def _chat_with_retry(
     return retried, is_valid(retried)
 
 
-async def call_llm(transcript_text: str, source_url: str, platform: Platform) -> Recipe:
-    prompt = _build_pass1_prompt(transcript_text, source_url, platform)
+async def call_llm(
+    transcript_text: str, source_url: str, platform: Platform, corrective_note: str | None = None
+) -> Recipe:
+    prompt = _build_pass1_prompt(transcript_text, source_url, platform, corrective_note)
     recipe = await _chat(prompt, Recipe, _SYSTEM_PASS1, few_shot=_FEW_SHOT_MESSAGES)
     recipe.source_url = source_url
     recipe.platform = platform

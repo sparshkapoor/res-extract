@@ -18,6 +18,7 @@ from app.pipeline import (
     ocr,
     spellcheck,
     transcript,
+    validate,
     vision_narration,
     vlm,
 )
@@ -137,21 +138,7 @@ async def run_pipeline(job_id: str, raw_url: str) -> None:
         if not recipe.steps:
             raise PipelineError("LLM extraction produced no recipe steps from this transcript.")
 
-        # --- 5b. Refine ingredients with the video's own written description ---
-        # Runs before OCR refinement so OCR only has to incrementally improve an
-        # already-good list, not start from raw transcript-only extraction.
-        # Ingredients have no citation requirement (unlike steps), so this
-        # non-timestamped text is safe to use here the same way OCR text is.
-        if video_asset.description.strip():
-            await job_manager.update_status(
-                job_id, JobStatus.extracting, "Refining ingredients from video description..."
-            )
-            async with _timed_stage("llm_description_refine"):
-                recipe.ingredients = await extract_recipe.refine_ingredients_with_description(
-                    recipe.ingredients, video_asset.description
-                )
-
-        # --- 6. Citation -> timestamp mapping ---------------------------------
+        # --- 5a. Citation -> timestamp mapping ---------------------------------
         recipe.steps, unmatched_count = citation_map.map_steps_to_timestamps(
             recipe.steps, transcript_result.segments, video_asset.duration_seconds
         )
@@ -166,6 +153,64 @@ async def run_pipeline(job_id: str, raw_url: str) -> None:
                 "LLM extraction could not be verified against the transcript — "
                 "this video likely has insufficient narration for recipe extraction."
             )
+
+        # --- 5b. Step-granularity validation + bounded corrective retry --------
+        # Deterministic checks the citation guard above can't catch (a single
+        # terse-but-cited step passes that guard fine) — see validate.py. Runs
+        # before frame extraction/OCR/VLM so a retry never wastes that work.
+        validation = validate.validate_recipe(recipe, transcript_result.segments, video_asset.duration_seconds)
+        if validation.needs_retry:
+            logger.info(
+                "job %s: step-granularity validation flagged pass 1 (steps=%d, expected_min=%d, "
+                "terse=%s, coverage=%.2f) — retrying once",
+                job_id, len(recipe.steps), validation.expected_min_steps,
+                validation.terse_step_indexes, validation.transcript_coverage,
+            )
+            corrective_note = validate.build_corrective_note(recipe, validation, video_asset.duration_seconds)
+            async with _timed_stage("llm_pass1_retry"):
+                retry_recipe = await extract_recipe.call_llm(
+                    full_text, url, platform, corrective_note=corrective_note
+                )
+            if retry_recipe.steps:
+                retry_recipe.title = retry_recipe.title or video_asset.title
+                retry_recipe.steps, _retry_unmatched = citation_map.map_steps_to_timestamps(
+                    retry_recipe.steps, transcript_result.segments, video_asset.duration_seconds
+                )
+                retry_validation = validate.validate_recipe(
+                    retry_recipe, transcript_result.segments, video_asset.duration_seconds
+                )
+                # Coverage alone decides the winner: a garbage retry (e.g. the
+                # model hallucinated on the corrective prompt) naturally scores
+                # near-zero coverage, so this doubles as the retry's own sanity
+                # check without a separate unmatched-citation guard.
+                if retry_validation.transcript_coverage > validation.transcript_coverage:
+                    logger.info(
+                        "job %s: retry improved coverage %.2f -> %.2f, keeping retry",
+                        job_id, validation.transcript_coverage, retry_validation.transcript_coverage,
+                    )
+                    recipe, validation = retry_recipe, retry_validation
+                else:
+                    logger.info(
+                        "job %s: retry did not improve coverage (%.2f vs %.2f), keeping original attempt",
+                        job_id, retry_validation.transcript_coverage, validation.transcript_coverage,
+                    )
+            else:
+                logger.info("job %s: retry produced no steps, keeping original attempt", job_id)
+
+        # --- 5c. Refine ingredients with the video's own written description ---
+        # Runs before OCR refinement so OCR only has to incrementally improve an
+        # already-good list, not start from raw transcript-only extraction.
+        # Ingredients have no citation requirement (unlike steps), so this
+        # non-timestamped text is safe to use here the same way OCR text is.
+        if video_asset.description.strip():
+            await job_manager.update_status(
+                job_id, JobStatus.extracting, "Refining ingredients from video description..."
+            )
+            async with _timed_stage("llm_description_refine"):
+                recipe.ingredients = await extract_recipe.refine_ingredients_with_description(
+                    recipe.ingredients, video_asset.description
+                )
+
         await job_manager.update_status(
             job_id, JobStatus.extracted, f"Extracted {len(recipe.steps)} steps, {len(recipe.ingredients)} ingredients"
         )
