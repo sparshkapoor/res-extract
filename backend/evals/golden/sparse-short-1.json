@@ -1,0 +1,76 @@
+{
+  "id": "sparse-short-1",
+  "url": "https://www.youtube.com/shorts/050xIwsfpuo",
+  "platform": "youtube",
+  "transcript": {
+    "segments": [
+      {
+        "text": "Welcome to Simple Sauces part 31. Gou",
+        "start": 0.08,
+        "end": 4.5600000000000005
+      },
+      {
+        "text": "jang sauce. This one is so simple and",
+        "start": 2.32,
+        "end": 6.4
+      },
+      {
+        "text": "I'm absolutely hooked. It's just five",
+        "start": 4.56,
+        "end": 8.639
+      },
+      {
+        "text": "simple ingredients. Mayo, go jang, soy",
+        "start": 6.4,
+        "end": 10.48
+      },
+      {
+        "text": "sauce, rice vinegar, grated garlic,",
+        "start": 8.639,
+        "end": 12.879999999999999
+      },
+      {
+        "text": "salt, and pepper. Creamy, spicy, tangy.",
+        "start": 10.48,
+        "end": 14.24
+      },
+      {
+        "text": "It's got that perfect kick that makes",
+        "start": 12.88,
+        "end": 15.519
+      },
+      {
+        "text": "you want to put it on literally",
+        "start": 14.24,
+        "end": 18.08
+      },
+      {
+        "text": "everything.",
+        "start": 15.519,
+        "end": 18.08
+      }
+    ],
+    "source": "captions"
+  },
+  "description": "",
+  "ocr_text": "",
+  "duration_seconds": 17.0,
+  "expected": {
+    "title_contains": [
+      "Sauce"
+    ],
+    "ingredients": [
+      { "name": "mayonnaise", "quantity": null, "unit": null },
+      { "name": "gochujang", "quantity": null, "unit": null },
+      { "name": "soy sauce", "quantity": null, "unit": null },
+      { "name": "rice vinegar", "quantity": null, "unit": null },
+      { "name": "garlic", "quantity": null, "unit": null },
+      { "name": "salt", "quantity": null, "unit": null },
+      { "name": "pepper", "quantity": null, "unit": null }
+    ],
+    "steps_count_range": [3, 6],
+    "must_cite": true,
+    "min_transcript_coverage": null,
+    "max_terse_steps": null
+  }
+}

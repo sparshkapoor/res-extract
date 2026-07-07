@@ -1,0 +1,77 @@
+{
+  "title": "Gou Jang Sauce",
+  "source_url": "https://www.youtube.com/shorts/050xIwsfpuo",
+  "platform": "youtube",
+  "ingredients": [
+    {
+      "name": "mayonnaise",
+      "quantity": null,
+      "unit": null,
+      "is_estimated": true,
+      "name_is_generic": false,
+      "note": null
+    },
+    {
+      "name": "go jang",
+      "quantity": null,
+      "unit": null,
+      "is_estimated": true,
+      "name_is_generic": false,
+      "note": null
+    },
+    {
+      "name": "soy sauce",
+      "quantity": null,
+      "unit": null,
+      "is_estimated": true,
+      "name_is_generic": false,
+      "note": null
+    },
+    {
+      "name": "rice vinegar",
+      "quantity": null,
+      "unit": null,
+      "is_estimated": true,
+      "name_is_generic": false,
+      "note": null
+    },
+    {
+      "name": "garlic",
+      "quantity": null,
+      "unit": "cloves",
+      "is_estimated": true,
+      "name_is_generic": false,
+      "note": "grated"
+    },
+    {
+      "name": "salt",
+      "quantity": null,
+      "unit": "pinch",
+      "is_estimated": true,
+      "name_is_generic": false,
+      "note": null
+    },
+    {
+      "name": "pepper",
+      "quantity": null,
+      "unit": "pinch",
+      "is_estimated": true,
+      "name_is_generic": false,
+      "note": null
+    }
+  ],
+  "steps": [
+    {
+      "index": 0,
+      "instruction": "Mix mayonnaise, go jang, soy sauce, rice vinegar, grated garlic, salt, and pepper together.",
+      "verbatim_transcript_citation": "It's just five simple ingredients. Mayo, go jang, soy sauce, rice vinegar, grated garlic, salt, and pepper",
+      "timestamp_seconds": 6.4,
+      "image_path": null
+    }
+  ],
+  "hero_image_path": null,
+  "cook_time_minutes": null,
+  "servings": null,
+  "calories": null,
+  "oven_temp_f": null
+}
