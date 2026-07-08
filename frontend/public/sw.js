@@ -22,7 +22,19 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/api") || url.pathname.startsWith("/media")) return;
   if (event.request.method !== "GET") return;
 
+  // Network-first, cache as offline fallback only — a cache-first shell
+  // means every future deploy needs someone to remember to bump CACHE_NAME,
+  // and if they don't (as happened once already), the browser keeps serving
+  // an arbitrarily old shell forever with no way for a normal reload to fix
+  // it. This still gives the shell offline resilience (the whole point of
+  // caching it), it just no longer wins over a reachable, up-to-date server.
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    fetch(event.request)
+      .then((response) => {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
