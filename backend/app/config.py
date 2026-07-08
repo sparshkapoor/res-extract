@@ -73,6 +73,14 @@ class Settings(BaseSettings):
     # Instagram auth (yt-dlp needs a cookie export; see deploy notes)
     instagram_cookies_file: Path | None = None
 
+    # WS4d: comment-mining for ingredient quantities on no-signal short-form
+    # videos (see comments.py) — YouTube only. Feature-flaggable without a
+    # code change if yt-dlp comment scraping proves unreliable/rate-limited
+    # in practice.
+    comment_mining_enabled: bool = True
+    comment_mining_max_comments: int = 50
+    comment_mining_shortlist_size: int = 2
+
     # Server
     host: str = "0.0.0.0"
     port: int = 8000

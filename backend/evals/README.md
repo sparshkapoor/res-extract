@@ -114,6 +114,32 @@ correctly (that's the point — it's supposed to catch real gaps).
     bug — left as an honest gap rather than papered over by expecting the
     garbled transcription.
 
+## Comment-mining (WS4d)
+
+For no-signal short-form videos like `sparse-short-1` (no written description,
+almost no actionable narration), the transcript/description/OCR chain above
+sometimes can't recover a real ingredient quantity — but a viewer's own
+recreation, posted in the comments, occasionally can. `app/pipeline/comments.py`
++ `extract_recipe.rate_comment_confidence`/`refine_ingredients_with_comment`
+implement this as a YouTube-only, best-effort orchestrator stage (see
+`orchestrator._mine_comments`) gated on at least one ingredient still being
+`is_estimated=true` after description-refine. Deliberately **never** sets
+`is_estimated=false` for a comment-sourced value — a comment is an unverified
+external claim, not something the video itself stated, so the value gets
+`is_estimated=true` plus a `note` of "from a viewer's comment" instead,
+keeping the frontend's honest "not stated in the video" framing accurate.
+
+This stage isn't currently exercised by `run_eval.py`'s `--live`/`--offline`
+chain (comment-mining happens after the eval harness's own scope ends) — its
+tests live in `tests/test_comments.py` instead, using a real ~80-comment
+fixture scraped from the `sparse-short-1` video (`tests/fixtures/
+sparse_short_1_comments.json`, captured via `capture.py --with-comments`),
+including the actual fan recreation that motivated this feature: "½ cup
+mayonnaise / 1–2 tbsp gochujang / 1 clove garlic, grated / 1 tsp soy sauce /
+1 tsp rice vinegar / Salt & pepper, to taste" — the VLM's own vision-based
+guess for this same video had gotten mayo and soy sauce backwards in
+*relative* proportion, which is what surfaced the gap this feature closes.
+
 ## Why this instead of fine-tuning
 
 Fine-tuning a 7B model on cooking-transcript-to-recipe pairs without an

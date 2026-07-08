@@ -44,5 +44,11 @@ class GoldenCase(BaseModel):
     transcript: TranscriptResult
     description: str = ""
     ocr_text: str = ""
+    # WS4d — frozen candidate comment texts (same freeze-inputs philosophy as
+    # transcript/description/ocr_text), populated via `capture.py
+    # --with-comments`. Empty by default; the eval harness itself doesn't
+    # currently exercise the comment-mining stage (see run_eval.py), so this
+    # is mainly for building comments.py test fixtures from real data.
+    comments: list[str] = Field(default_factory=list)
     duration_seconds: float = 0.0
     expected: Expected

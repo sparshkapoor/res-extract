@@ -21,6 +21,8 @@ from pathlib import Path
 from app.cache import result_cache
 from app.config import get_settings
 from app.db import init_db
+from app.models import Platform
+from app.pipeline import comments as comments_pipeline
 from app.pipeline import download, transcript
 from app.pipeline.url_utils import detect_platform, normalize_url, sha256_of_url
 
@@ -43,7 +45,7 @@ async def _prefill_expected(url_hash: str) -> Expected:
     )
 
 
-async def main(url: str, case_id: str, overwrite: bool) -> None:
+async def main(url: str, case_id: str, overwrite: bool, with_comments: bool) -> None:
     await init_db()
     out_path = GOLDEN_DIR / f"{case_id}.json"
     if out_path.exists() and not overwrite:
@@ -67,6 +69,19 @@ async def main(url: str, case_id: str, overwrite: bool) -> None:
         print("[capture] checking result_cache for an expected-block starting point...")
         expected = await _prefill_expected(url_hash)
 
+        case_comments: list[str] = []
+        if with_comments:
+            if platform != Platform.youtube:
+                print("[capture] --with-comments skipped: comment scraping is YouTube-only")
+            else:
+                print("[capture] fetching comments...")
+                settings = get_settings()
+                fetched = await comments_pipeline.fetch_top_comments(
+                    url, max_comments=settings.comment_mining_max_comments
+                )
+                case_comments = [c.text for c in fetched]
+                print(f"[capture] captured {len(case_comments)} comments")
+
         case = GoldenCase(
             id=case_id,
             url=url,
@@ -74,6 +89,7 @@ async def main(url: str, case_id: str, overwrite: bool) -> None:
             transcript=transcript_result,
             description=video_asset.description,
             ocr_text="",
+            comments=case_comments,
             duration_seconds=video_asset.duration_seconds,
             expected=expected,
         )
@@ -91,6 +107,10 @@ if __name__ == "__main__":
     parser.add_argument("url")
     parser.add_argument("--id", required=True, dest="case_id", help="golden case slug, e.g. 'rye-pitas'")
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument(
+        "--with-comments", action="store_true",
+        help="also fetch and freeze the video's top comments (YouTube only; see comments.py)",
+    )
     args = parser.parse_args()
 
-    asyncio.run(main(args.url, args.case_id, args.overwrite))
+    asyncio.run(main(args.url, args.case_id, args.overwrite, args.with_comments))

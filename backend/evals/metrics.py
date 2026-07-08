@@ -7,7 +7,7 @@ import re
 
 from app.models import Ingredient, Recipe, TranscriptSegment
 from app.pipeline import citation_map, validate
-from app.pipeline.normalize import normalize_ingredient
+from app.pipeline.normalize import names_match, normalize_ingredient
 
 from evals.schema import Expected, ExpectedIngredient
 
@@ -51,21 +51,6 @@ def _parse_quantity(raw: str | None) -> float | None:
     return None
 
 
-def _name_tokens(name: str) -> set[str]:
-    return set(re.findall(r"[a-z0-9]+", name.lower()))
-
-
-def _names_match(predicted_name: str, expected_name: str) -> bool:
-    if predicted_name.strip().lower() == expected_name.strip().lower():
-        return True
-    p_tokens, e_tokens = _name_tokens(predicted_name), _name_tokens(expected_name)
-    if not p_tokens or not e_tokens:
-        return False
-    # Either direction counts — "onion" (expected) should match "yellow
-    # onion" (predicted), and vice versa for an over-specific expectation.
-    return e_tokens <= p_tokens or p_tokens <= e_tokens
-
-
 def match_ingredients(
     predicted: list[Ingredient], expected: list[ExpectedIngredient]
 ) -> list[tuple[Ingredient, ExpectedIngredient]]:
@@ -77,7 +62,7 @@ def match_ingredients(
     remaining = list(predicted)
     pairs = []
     for exp in expected:
-        candidates = [p for p in remaining if _names_match(p.name, exp.name)]
+        candidates = [p for p in remaining if names_match(p.name, exp.name)]
         if not candidates:
             continue
         expected_val = _parse_quantity(exp.quantity)

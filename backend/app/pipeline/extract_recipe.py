@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import Callable
+from typing import Callable, Literal
 
 import ollama
 from pydantic import BaseModel
@@ -22,6 +22,11 @@ class _StepInstruction(BaseModel):
 
 class _InstructionsOnly(BaseModel):
     steps: list[_StepInstruction]
+
+
+class _CommentConfidence(BaseModel):
+    confidence: Literal["high", "medium", "low"]
+    matches_dish: bool
 
 
 # Reused verbatim from normalize.py so the prompt can never list a unit the
@@ -108,6 +113,38 @@ was derived from. Output must conform exactly to the given JSON schema. Fix only
 garbled, truncated, non-English gibberish, or don't logically match their citation; leave every other \
 instruction completely unchanged. Never add, remove, or reorder steps, and keep every `index` exactly as \
 given."""
+
+# WS4d — comment-mining. A viewer's comment can state a concrete quantity a
+# no-narration video never does, but it's still an UNVERIFIED external
+# claim (a fan's guess at a recreation, not the creator's own numbers) —
+# never treated as authoritative the way the transcript/description/OCR
+# passes are. Two separate calls, deliberately: one judges dish-identity
+# plausibility only (never asked to verify quantities — that's not
+# verifiable from a transcript/frames), the other actually fills values,
+# and always keeps is_estimated=true + a provenance note rather than the
+# refine-pass norm of is_estimated=false, so the UI's "not stated in the
+# video" framing (RecipeCard.tsx) stays accurate for values sourced here.
+_SYSTEM_COMMENT_CONFIDENCE = """You judge whether a YouTube comment plausibly describes the SAME dish as a \
+recipe extracted from a cooking video's transcript — NOT whether the comment's numbers are correct; you have \
+no way to verify quantities from a transcript alone and must never claim to. Compare the comment's \
+ingredients against the video's transcript and its already-extracted ingredient list. Recognize garbled \
+transcript variants of the same word (e.g. transcript "go jang" is the same ingredient as a comment's \
+"gochujang"). Set matches_dish=true only if the comment's ingredients substantially overlap with the dish \
+actually being made — not a different recipe, not pure banter/reaction with no real ingredient list. Set \
+confidence="high" only when matches_dish=true AND the comment reads as a genuine, specific recreation \
+(concrete quantities/units for most of its ingredients), not a vague guess, a joke, or one ingredient \
+mentioned in passing. Use "medium" for a plausible but incomplete or less certain match, and "low" for \
+anything that doesn't clearly describe this dish. Output must conform exactly to the given JSON schema."""
+
+_SYSTEM_COMMENT_REFINE = f"""You are revising a recipe's ingredient list using a comment left by a viewer of \
+the video, who appears to describe their own recreation of this dish. Output must conform exactly to the \
+given JSON schema. `unit` must be one of these canonical tokens, or null: {_UNIT_GLOSSARY} — never a \
+free-text note, a preposition phrase, or a number. If the comment states a concrete quantity/unit for an \
+ingredient that is currently null or estimated, copy that value into quantity/unit — but this value was NOT \
+stated in the video itself, so you MUST leave is_estimated=true (never set it false from this source) and \
+set `note` to "from a viewer's comment" (append with "; " if the ingredient already has a note) so this \
+value is never confused with something the video itself stated. Follow the specific revision instructions \
+in the user message exactly, and change nothing they don't ask you to change."""
 
 
 # One few-shot example, as a user/assistant message pair ahead of the real
@@ -253,6 +290,33 @@ def _build_description_prompt(ingredients_json: str, description_text: str) -> s
         "exists anywhere.\n"
         "- Never invent an ingredient that isn't in either the current list or the description.\n"
         "- Never delete an ingredient the description doesn't happen to mention — leave it as-is.\n"
+        "Output the full revised ingredients list as a JSON object matching the schema."
+    )
+
+
+def _build_comment_confidence_prompt(transcript_text: str, ingredients_json: str, comment_text: str) -> str:
+    return (
+        f"Video transcript:\n{transcript_text}\n\n"
+        f"Ingredients already extracted from the transcript:\n{ingredients_json}\n\n"
+        f"Candidate viewer comment:\n{comment_text}\n\n"
+        "Rate this comment as described in your instructions."
+    )
+
+
+def _build_comment_refine_prompt(ingredients_json: str, comment_text: str) -> str:
+    return (
+        "Here are the ingredients already extracted from a video's spoken transcript:\n"
+        f"{ingredients_json}\n\n"
+        "Here is a comment left by a viewer of the video, already judged to plausibly describe their own "
+        "recreation of this same dish (this is an unverified external claim, not something the video itself "
+        "stated):\n"
+        f"{comment_text}\n\n"
+        "Revise ONLY ingredients that are currently is_estimated=true or have quantity=null, and only when "
+        "this comment states a concrete quantity/unit for that SAME ingredient (match by meaning, not exact "
+        "spelling — e.g. 'gochujang' matches an ASR-garbled transcript ingredient named 'go jang'). Never "
+        "invent an ingredient not already in the list, never delete one, and keep every ingredient name and "
+        "count exactly the same. For every ingredient you fill in, keep is_estimated=true and add the "
+        "provenance note exactly as instructed. "
         "Output the full revised ingredients list as a JSON object matching the schema."
     )
 
@@ -414,4 +478,73 @@ async def refine_ingredients_with_description(
         # The model returned nothing usable — keep the originals rather than
         # silently emptying the ingredient list.
         return ingredients
+    return refined.ingredients
+
+
+async def rate_comment_confidence(
+    transcript_text: str, ingredients: list[Ingredient], comment_text: str
+) -> _CommentConfidence:
+    """Judges dish-identity plausibility only — never quantity accuracy, see
+    _SYSTEM_COMMENT_CONFIDENCE. One call per shortlisted comment (see
+    comments.shortlist_recipe_like_comments), using the already-warm text
+    model — no extra cold-load, unlike a vision call."""
+    ingredients_json = _IngredientsOnly(ingredients=ingredients).model_dump_json()
+    prompt = _build_comment_confidence_prompt(transcript_text, ingredients_json, comment_text)
+    return await _chat(prompt, _CommentConfidence, _SYSTEM_COMMENT_CONFIDENCE)
+
+
+async def refine_ingredients_with_comment(ingredients: list[Ingredient], comment_text: str) -> list[Ingredient]:
+    """Same gap-filling shape as refine_ingredients_with_description (only
+    touches ingredients still null/estimated, never invents or drops
+    ingredients) but deliberately does NOT set is_estimated=false the way
+    every other refine pass does — a viewer's comment is an unverified
+    external claim, not something the video itself stated, so this keeps
+    is_estimated=true and records provenance in `note` instead (see
+    _SYSTEM_COMMENT_REFINE). Callers should only invoke this after
+    rate_comment_confidence returns confidence="high"."""
+    ingredients_json = _IngredientsOnly(ingredients=ingredients).model_dump_json()
+    prompt = _build_comment_refine_prompt(ingredients_json, comment_text)
+    want = len(ingredients)
+
+    def is_valid(parsed: _IngredientsOnly) -> bool:
+        return len(parsed.ingredients) == want
+
+    refined, ok = await _chat_with_retry(
+        prompt,
+        _IngredientsOnly,
+        _SYSTEM_COMMENT_REFINE,
+        is_valid,
+        f"Your previous response changed the ingredient count. Return exactly {want} ingredients — the "
+        "same ones, in the same order — revising only their quantity/unit/note fields.",
+    )
+    if not ok:
+        # Same alignment safety as refine_ingredients_with_ocr — don't risk
+        # misapplying a value to the wrong ingredient.
+        return ingredients
+
+    # Deterministically re-assert is_estimated=true for anything this pass
+    # touched, rather than trusting the model's own boolean — verified live
+    # on the sparse-short-1 video: qwen2.5:7b filled real values from a
+    # genuine viewer comment but flipped is_estimated=False on most changed
+    # ingredients despite _SYSTEM_COMMENT_REFINE explicitly saying "you MUST
+    # leave is_estimated=true". Same instruction-following gap class as the
+    # "copy concrete values in" fix noted at _SYSTEM_INGREDIENT_REFINE above.
+    # Two independent tells that this pass touched an ingredient, since
+    # either alone missed a real case in live testing: quantity/unit
+    # actually changed, OR the model added the "from a viewer's comment"
+    # note marker without changing the value (observed live: an ingredient
+    # an earlier, unrelated pipeline stage had already mis-marked
+    # is_estimated=false with a guess that happened to match the comment —
+    # the model correctly recognized the comment corroborated it and added
+    # the note, but that still means the value's true provenance is this
+    # comment, not something the video stated). Positional zip is safe:
+    # `is_valid` already guarantees the count matches and the prompt
+    # instructs the model to preserve order.
+    for original, new in zip(ingredients, refined.ingredients):
+        value_changed = (new.quantity, new.unit) != (original.quantity, original.unit)
+        note_newly_attributed = "from a viewer's comment" in (new.note or "") and "from a viewer's comment" not in (
+            original.note or ""
+        )
+        if value_changed or note_newly_attributed:
+            new.is_estimated = True
     return refined.ingredients

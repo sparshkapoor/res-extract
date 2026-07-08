@@ -270,3 +270,28 @@ def normalize_ingredients(ingredients):
 
 def normalize_recipe(recipe):
     return recipe.model_copy(update={"ingredients": normalize_ingredients(recipe.ingredients)})
+
+
+# --- Name-token matching --------------------------------------------------
+# Shared by evals/metrics.py (predicted-vs-expected ingredient matching) and
+# comments.py (WS4d — scoring whether a viewer comment mentions an
+# ingredient this recipe already has), so both agree on what "the same
+# ingredient name" means instead of maintaining two token-matching
+# implementations that could silently drift apart.
+
+
+def name_tokens(name: str) -> set[str]:
+    return set(re.findall(r"[a-z0-9]+", name.lower()))
+
+
+def names_match(a: str, b: str) -> bool:
+    if a.strip().lower() == b.strip().lower():
+        return True
+    a_tokens, b_tokens = name_tokens(a), name_tokens(b)
+    if not a_tokens or not b_tokens:
+        return False
+    # Either direction counts — "onion" should match "yellow onion", and a
+    # short ingredient name's tokens being a subset of a longer free-text
+    # string's tokens (e.g. checking whether a comment *mentions* "garlic")
+    # is exactly the same subset relationship.
+    return a_tokens <= b_tokens or b_tokens <= a_tokens

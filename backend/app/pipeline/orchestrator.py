@@ -8,9 +8,10 @@ from pathlib import Path
 from app.cache import result_cache
 from app.config import get_settings
 from app.jobs import job_manager
-from app.models import JobStatus, Platform, Recipe, TranscriptResult
+from app.models import Ingredient, JobStatus, Platform, Recipe, TranscriptResult
 from app.pipeline import (
     citation_map,
+    comments,
     download,
     extract_recipe,
     frames,
@@ -80,6 +81,44 @@ async def _extract_hero_candidates(video_path: Path, duration: float, job_frames
 
     results = await asyncio.gather(*(_grab(i, ts) for i, ts in enumerate(hero_timestamps)))
     return [p for p in results if p is not None]
+
+
+def _should_mine_comments(platform: Platform, ingredients: list[Ingredient], enabled: bool) -> bool:
+    """Pure gate, pulled out for testability like _nudge_forward above.
+    YouTube only (Instagram comment support in yt-dlp is unreliable); skips
+    entirely when nothing is still estimated, so a normal well-narrated
+    video never pays the extra fetch + LLM cost."""
+    return enabled and platform == Platform.youtube and any(i.is_estimated for i in ingredients)
+
+
+async def _mine_comments(
+    job_id: str, ingredients: list[Ingredient], url: str, transcript_text: str, settings
+) -> list[Ingredient]:
+    """WS4d — best-effort enrichment for no-signal short-form videos: fetch
+    comments, deterministically shortlist the ones that read like a real
+    recreation (comments.shortlist_recipe_like_comments), then spend one LLM
+    call per shortlisted comment judging dish-identity plausibility only
+    (never quantity accuracy — see extract_recipe.rate_comment_confidence).
+    Only confidence="high" actually applies a comment's values; medium/low
+    is logged and discarded. Stops early once nothing is left estimated, so
+    a second shortlisted comment is never fetched-for-nothing."""
+    fetched = await comments.fetch_top_comments(url, max_comments=settings.comment_mining_max_comments)
+    if not fetched:
+        return ingredients
+    shortlist = comments.shortlist_recipe_like_comments(
+        fetched, [i.name for i in ingredients], top_n=settings.comment_mining_shortlist_size
+    )
+    for comment in shortlist:
+        if not any(i.is_estimated for i in ingredients):
+            break
+        rating = await extract_recipe.rate_comment_confidence(transcript_text, ingredients, comment.text)
+        logger.info(
+            "job %s: comment-mining candidate %s -> confidence=%s matches_dish=%s",
+            job_id, comment.id, rating.confidence, rating.matches_dish,
+        )
+        if rating.confidence == "high" and rating.matches_dish:
+            ingredients = await extract_recipe.refine_ingredients_with_comment(ingredients, comment.text)
+    return ingredients
 
 
 async def run_pipeline(job_id: str, raw_url: str) -> None:
@@ -332,6 +371,35 @@ async def run_pipeline(job_id: str, raw_url: str) -> None:
             await job_manager.update_status(job_id, JobStatus.ocr, "Refining recipe with on-screen text...")
             async with _timed_stage("llm_ocr_refine"):
                 recipe.ingredients = await extract_recipe.refine_ingredients_with_ocr(recipe.ingredients, ocr_text)
+
+        # --- 9a2. Comment-mining gap-fill (WS4d) ---------------------------------
+        # Best-effort enrichment for no-signal short-form videos where neither
+        # the transcript, description, nor on-screen OCR text states real
+        # quantities — see comments.py and _mine_comments above. Runs AFTER
+        # OCR-refine deliberately (the plan originally specced this stage
+        # before OCR-refine, but live testing on this exact video showed why
+        # that's wrong): refine_ingredients_with_ocr re-emits the full
+        # ingredient list via an LLM call, and even when the OCR text has no
+        # real quantities in it (confirmed live: this video's OCR text was
+        # just fragments of its own burned-in captions, e.g. "TANGY,"), the
+        # model sometimes still drops an ingredient's `note` and/or flips
+        # is_estimated back to False — silently destroying comment-mining's
+        # "unverified, not stated in the video" provenance. Running this
+        # stage last in the ingredient chain means only vlm.py's vision pass
+        # (10) can still touch these ingredients afterward, and that pass
+        # mutates fields in place rather than re-emitting the object, so it
+        # can't accidentally drop `note`. Never fails the job (comment
+        # fetching can be rate-limited, disabled, or the video can simply
+        # have none).
+        if _should_mine_comments(platform, recipe.ingredients, settings.comment_mining_enabled):
+            await job_manager.update_status(
+                job_id, JobStatus.refining, "Checking video comments for stated quantities..."
+            )
+            async with _timed_stage("comment_mining"):
+                try:
+                    recipe.ingredients = await _mine_comments(job_id, recipe.ingredients, url, full_text, settings)
+                except Exception as e:  # noqa: BLE001 - best-effort enrichment, never fails the job
+                    logger.warning("job %s: comment mining failed, keeping current ingredients: %s", job_id, e)
 
         # --- 9b. Proofread step instructions against their own citations -------------
         await job_manager.update_status(job_id, JobStatus.refining, "Proofreading steps...")

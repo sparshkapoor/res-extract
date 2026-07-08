@@ -1,4 +1,25 @@
-from app.pipeline.orchestrator import _nudge_forward
+from app.models import Ingredient, Platform
+from app.pipeline.orchestrator import _nudge_forward, _should_mine_comments
+
+
+def _ing(is_estimated: bool) -> Ingredient:
+    return Ingredient(name="test", is_estimated=is_estimated)
+
+
+def test_should_mine_comments_requires_youtube():
+    assert not _should_mine_comments(Platform.instagram, [_ing(True)], enabled=True)
+
+
+def test_should_mine_comments_requires_an_estimated_ingredient():
+    assert not _should_mine_comments(Platform.youtube, [_ing(False), _ing(False)], enabled=True)
+
+
+def test_should_mine_comments_respects_feature_flag():
+    assert not _should_mine_comments(Platform.youtube, [_ing(True)], enabled=False)
+
+
+def test_should_mine_comments_true_when_all_conditions_met():
+    assert _should_mine_comments(Platform.youtube, [_ing(False), _ing(True)], enabled=True)
 
 
 def test_nudge_forward_passes_through_when_already_ahead():
