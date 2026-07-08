@@ -1,0 +1,20 @@
+# Docker build context for deploy/colima's nginx image (see
+# deploy/colima/Dockerfile) only ever reads frontend/dist/ and
+# deploy/colima/nginx.conf -- nothing else in the repo is needed at build
+# time. Without this file the entire repo, including backend/.venv
+# (~1.6GB) and backend/storage's growing video/frame cache, was being sent
+# to the Docker daemon on every single build (~530MB and climbing) -- which
+# is also most of why an existing build-cache bug (a `COPY frontend/dist/`
+# layer silently reusing a week-old cached layer instead of picking up a
+# fresh build) went unnoticed for so long: a build that slow doesn't get
+# re-run casually just to double-check.
+
+.git/
+backend/
+frontend/node_modules/
+frontend/src/
+.claude/
+.agents/
+*.md
+repomix-output.xml
+skills-lock.json

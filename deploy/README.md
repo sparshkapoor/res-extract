@@ -66,6 +66,8 @@ to isolate whether it's a TCC/session issue.
 
 ## 3. Frontend build + Colima/nginx
 
+First-time setup:
+
 ```
 cd frontend && npm run build   # outputs to frontend/dist
 
@@ -83,6 +85,41 @@ services to `docker-compose.yml` — see the comments in that file and
 The app is then reachable on the LAN at whatever host port you set in
 `docker-compose.yml`. On a shared server, run `docker ps` first to check
 for conflicts with anything else already running before picking a port.
+
+**Redeploying after a code change — always use `--no-cache` and
+`--force-recreate`:**
+
+```
+git pull
+cd frontend && npm run build
+
+cd deploy/colima
+docker compose build --no-cache nginx
+docker compose up -d --force-recreate
+```
+
+Verified broken in practice once already: a plain `docker compose build`
+(no `--no-cache`) reported "Successfully tagged" but silently reused a
+week-old cached `COPY frontend/dist/` layer instead of picking up the
+freshly built one, and a plain `docker compose up -d` (no
+`--force-recreate`) then saw no config change and left the week-old
+container running untouched — the deploy looked entirely successful at
+every step while serving completely stale content. `.dockerignore`
+(repo root) keeps this rebuild fast despite `--no-cache` by excluding
+everything the image doesn't actually need (`backend/.venv`,
+`backend/storage`, `frontend/node_modules`, `.git`) from the build
+context — without it, every rebuild sends the better part of a gigabyte
+to the Docker daemon, which is also why the stale-cache bug above went
+unnoticed for as long as it did.
+
+To confirm a redeploy actually took effect, don't just curl `/api/health`
+(that only proves the container is *running*, not that it's running the
+*new* image):
+
+```
+docker inspect colima-nginx-1 --format 'Image: {{.Image}}  Created: {{.Created}}'
+docker exec colima-nginx-1 grep -c 'Reels in' /usr/share/nginx/html/assets/*.js   # or any string unique to the change just shipped
+```
 
 ## 4. Instagram cookies
 
